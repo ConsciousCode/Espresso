@@ -7,10 +7,6 @@ type ReaderEntry = string | null;
 interface BufferEntry {
     type: string;
     value: string;
-    regex?: {
-        pattern: string;
-        flags: string;
-    };
     range?: [number, number];
     loc?: SourceLocation;
 }
@@ -36,44 +32,6 @@ class Reader {
             '+', '-', '*', '**', '/', '%', '++', '--', '<<', '>>', '>>>', '&',
             '|', '^', '!', '~', '&&', '||', '?', ':', '===', '==', '>=',
             '<=', '<', '>', '!=', '!=='].indexOf(t) >= 0;
-    }
-
-    // Determine if forward slash (/) is an operator or part of a regular expression
-    // https://github.com/mozilla/sweet.js/wiki/design
-    isRegexStart() {
-        const previous = this.values[this.values.length - 1];
-        let regex = (previous !== null);
-
-        switch (previous) {
-            case 'this':
-            case ']':
-                regex = false;
-                break;
-
-            case ')':
-                const keyword = this.values[this.paren - 1];
-                regex = (keyword === 'if' || keyword === 'while' || keyword === 'for' || keyword === 'with');
-                break;
-
-            case '}':
-                // Dividing a function by anything makes little sense,
-                // but we have to check for that.
-                regex = false;
-                if (this.values[this.curly - 3] === 'function') {
-                    // Anonymous function, e.g. function(){} /42
-                    const check = this.values[this.curly - 4];
-                    regex = check ? !this.beforeFunctionExpression(check) : false;
-                } else if (this.values[this.curly - 4] === 'function') {
-                    // Named function, e.g. function f(){} /42/
-                    const check = this.values[this.curly - 5];
-                    regex = check ? !this.beforeFunctionExpression(check) : true;
-                }
-                break;
-            default:
-                break;
-        }
-
-        return regex;
     }
 
     push(token): void {
@@ -159,9 +117,8 @@ export class Tokenizer {
                         end: {}
                     };
                 }
-
-                const startRegex = (this.scanner.source[this.scanner.index] === '/') && this.reader.isRegexStart();
-                const token = startRegex ? this.scanner.scanRegExp() : this.scanner.lex();
+                
+                const token = this.scanner.lex();
                 this.reader.push(token);
 
                 const entry: BufferEntry = {
@@ -177,11 +134,6 @@ export class Tokenizer {
                         column: this.scanner.index - this.scanner.lineStart
                     };
                     entry.loc = loc;
-                }
-                if (token.type === Token.RegularExpression) {
-                    const pattern = token.pattern as string;
-                    const flags = token.flags as string;
-                    entry.regex = { pattern, flags };
                 }
 
                 this.buffer.push(entry);

@@ -312,11 +312,6 @@ export class Parser {
                 }
             };
         }
-        if (token.type === Token.RegularExpression) {
-            const pattern = token.pattern as string;
-            const flags = token.flags as string;
-            t.regex = { pattern, flags };
-        }
 
         return t;
     }
@@ -349,25 +344,6 @@ export class Parser {
         if (this.config.tokens && next.type !== Token.EOF) {
             this.tokens.push(this.convertToken(next));
         }
-
-        return token;
-    }
-
-    nextRegexToken(): RawToken {
-        this.collectComments();
-
-        const token = this.scanner.scanRegExp();
-        if (this.config.tokens) {
-            // Pop the previous token, '/' or '/='
-            // This is added from the lookahead token.
-            this.tokens.pop();
-
-            this.tokens.push(this.convertToken(token));
-        }
-
-        // Prime the next lookahead.
-        this.lookahead = token;
-        this.nextToken();
 
         return token;
     }
@@ -650,15 +626,6 @@ export class Parser {
                         break;
                     case '{':
                         expr = this.inheritCoverGrammar(this.parseObjectInitializer);
-                        break;
-                    case '/':
-                    case '/=':
-                        this.context.isAssignmentTarget = false;
-                        this.context.isBindingElement = false;
-                        this.scanner.index = this.startMarker.index;
-                        token = this.nextRegexToken();
-                        raw = this.getTokenRaw(token);
-                        expr = this.finalize(node, new Node.RegexLiteral(token.regex as RegExp, raw, token.pattern, token.flags));
                         break;
                     default:
                         expr = this.throwUnexpectedToken(this.nextToken());
@@ -2668,7 +2635,6 @@ export class Parser {
             case Token.NumericLiteral:
             case Token.StringLiteral:
             case Token.Template:
-            case Token.RegularExpression:
                 statement = this.parseExpressionStatement();
                 break;
 
@@ -3152,8 +3118,7 @@ export class Parser {
                 start = (value === '[') || (value === '(') || (value === '{') ||
                     (value === '+') || (value === '-') ||
                     (value === '!') || (value === '~') ||
-                    (value === '++') || (value === '--') ||
-                    (value === '/') || (value === '/=');  // regular expression literal
+                    (value === '++') || (value === '--');
                 break;
 
             case Token.Keyword:

@@ -117,7 +117,7 @@ export class Tokenizer {
                         end: {}
                     };
                 }
-                
+
                 const token = this.scanner.lex();
                 this.reader.push(token);
 

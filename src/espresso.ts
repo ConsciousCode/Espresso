@@ -23,7 +23,6 @@
 */
 
 import { CommentHandler } from './comment-handler';
-import { JSXParser } from './jsx-parser';
 import { Parser } from './parser';
 import { Tokenizer } from './tokenizer';
 
@@ -56,12 +55,7 @@ export function parse(code: string, options, delegate) {
         isModule = (options.sourceType === 'module');
     }
 
-    let parser: Parser;
-    if (options && typeof options.jsx === 'boolean' && options.jsx) {
-        parser = new JSXParser(code, options, parserDelegate);
-    } else {
-        parser = new Parser(code, options, parserDelegate);
-    }
+    let parser = new Parser(code, options, parserDelegate);
 
     const program = isModule ? parser.parseModule() : parser.parseScript();
     const ast = program as any;

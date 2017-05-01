@@ -18,7 +18,6 @@ interface Config {
 interface Context {
     isModule: boolean;
     allowIn: boolean;
-    allowStrictDirective: boolean;
     allowYield: boolean;
     await: boolean;
     firstCoverInitializedNameError: RawToken | null;
@@ -28,7 +27,6 @@ interface Context {
     inIteration: boolean;
     inSwitch: boolean;
     labelSet: any;
-    strict: boolean;
 }
 
 export interface Marker {
@@ -108,8 +106,6 @@ export class Parser {
             '&': 5,
             '==': 6,
             '!=': 6,
-            '===': 6,
-            '!==': 6,
             '<': 7,
             '>': 7,
             '<=': 7,
@@ -138,7 +134,6 @@ export class Parser {
             isModule: false,
             await: false,
             allowIn: true,
-            allowStrictDirective: true,
             allowYield: true,
             firstCoverInitializedNameError: null,
             isAssignmentTarget: false,
@@ -146,8 +141,7 @@ export class Parser {
             inFunctionBody: false,
             inIteration: false,
             inSwitch: false,
-            labelSet: {},
-            strict: false
+            labelSet: {}
         };
         this.tokens = [];
 
@@ -208,14 +202,11 @@ export class Parser {
                     (token.type === Token.Identifier) ? Messages.UnexpectedIdentifier :
                         (token.type === Token.NumericLiteral) ? Messages.UnexpectedNumber :
                             (token.type === Token.StringLiteral) ? Messages.UnexpectedString :
-                                (token.type === Token.Template) ? Messages.UnexpectedTemplate :
-                                    Messages.UnexpectedToken;
+                                Messages.UnexpectedToken;
 
                 if (token.type === Token.Keyword) {
                     if (this.scanner.isFutureReservedWord(token.value)) {
                         msg = Messages.UnexpectedReserved;
-                    } else if (this.context.strict && this.scanner.isStrictModeReservedWord(token.value)) {
-                        msg = Messages.StrictReservedWord;
                     }
                 }
             }
@@ -334,11 +325,6 @@ export class Parser {
         const next = this.scanner.lex();
         this.hasLineTerminator = (token.lineNumber !== next.lineNumber);
 
-        if (next && this.context.strict && next.type === Token.Identifier) {
-            if (this.scanner.isStrictModeReservedWord(next.value as string)) {
-                next.type = Token.Keyword;
-            }
-        }
         this.lookahead = next;
 
         if (this.config.tokens && next.type !== Token.EOF) {
@@ -585,9 +571,6 @@ export class Parser {
 
             case Token.NumericLiteral:
             case Token.StringLiteral:
-                if (this.context.strict && this.lookahead.octal) {
-                    this.tolerateUnexpectedToken(this.lookahead, Messages.StrictOctalLiteral);
-                }
                 this.context.isAssignmentTarget = false;
                 this.context.isBindingElement = false;
                 token = this.nextToken();
@@ -611,10 +594,6 @@ export class Parser {
                 expr = this.finalize(node, new Node.Literal(null, raw));
                 break;
 
-            case Token.Template:
-                expr = this.parseTemplateLiteral();
-                break;
-
             case Token.Punctuator:
                 switch (this.lookahead.value) {
                     case '(':
@@ -633,9 +612,9 @@ export class Parser {
                 break;
 
             case Token.Keyword:
-                if (!this.context.strict && this.context.allowYield && this.matchKeyword('yield')) {
+                if (this.context.allowYield && this.matchKeyword('yield')) {
                     expr = this.parseIdentifierName();
-                } else if (!this.context.strict && this.matchKeyword('let')) {
+                } else if (this.matchKeyword('let')) {
                     expr = this.finalize(node, new Node.Identifier(this.nextToken().value));
                 } else {
                     this.context.isAssignmentTarget = false;
@@ -706,18 +685,7 @@ export class Parser {
         this.context.isAssignmentTarget = false;
         this.context.isBindingElement = false;
 
-        const previousStrict = this.context.strict;
-        const previousAllowStrictDirective = this.context.allowStrictDirective;
-        this.context.allowStrictDirective = params.simple;
         const body = this.isolateCoverGrammar(this.parseFunctionSourceElements);
-        if (this.context.strict && params.firstRestricted) {
-            this.tolerateUnexpectedToken(params.firstRestricted, params.message);
-        }
-        if (this.context.strict && params.stricted) {
-            this.tolerateUnexpectedToken(params.stricted, params.message);
-        }
-        this.context.strict = previousStrict;
-        this.context.allowStrictDirective = previousAllowStrictDirective;
 
         return body;
     }
@@ -758,9 +726,6 @@ export class Parser {
         switch (token.type) {
             case Token.StringLiteral:
             case Token.NumericLiteral:
-                if (this.context.strict && token.octal) {
-                    this.tolerateUnexpectedToken(token, Messages.StrictOctalLiteral);
-                }
                 const raw = this.getTokenRaw(token);
                 key = this.finalize(node, new Node.Literal(token.value as string, raw));
                 break;
@@ -896,49 +861,6 @@ export class Parser {
         this.expect('}');
 
         return this.finalize(node, new Node.ObjectExpression(properties));
-    }
-
-    // https://tc39.github.io/ecma262/#sec-template-literals
-
-    parseTemplateHead(): Node.TemplateElement {
-        assert(this.lookahead.head as boolean, 'Template literal must start with a template head');
-
-        const node = this.createNode();
-        const token = this.nextToken();
-        const raw = token.value as string;
-        const cooked = token.cooked as string;
-
-        return this.finalize(node, new Node.TemplateElement({ raw, cooked }, token.tail as boolean));
-    }
-
-    parseTemplateElement(): Node.TemplateElement {
-        if (this.lookahead.type !== Token.Template) {
-            this.throwUnexpectedToken();
-        }
-
-        const node = this.createNode();
-        const token = this.nextToken();
-        const raw = token.value as string;
-        const cooked = token.cooked as string;
-
-        return this.finalize(node, new Node.TemplateElement({ raw, cooked }, token.tail as boolean));
-    }
-
-    parseTemplateLiteral(): Node.TemplateLiteral {
-        const node = this.createNode();
-
-        const expressions: Node.Expression[] = [];
-        const quasis: Node.TemplateElement[] = [];
-
-        let quasi = this.parseTemplateHead();
-        quasis.push(quasi);
-        while (!quasi.tail) {
-            expressions.push(this.parseExpression());
-            quasi = this.parseTemplateElement();
-            quasis.push(quasi);
-        }
-
-        return this.finalize(node, new Node.TemplateLiteral(quasis, expressions));
     }
 
     // https://tc39.github.io/ecma262/#sec-grouping-operator
@@ -1274,10 +1196,6 @@ export class Parser {
                 this.expect(']');
                 expr = this.finalize(this.startNode(startToken), new Node.ComputedMemberExpression(expr, property));
 
-            } else if (this.lookahead.type === Token.Template && this.lookahead.head) {
-                const quasi = this.parseTemplateLiteral();
-                expr = this.finalize(this.startNode(startToken), new Node.TaggedTemplateExpression(expr, quasi));
-
             } else {
                 break;
             }
@@ -1321,10 +1239,6 @@ export class Parser {
                 const property = this.parseIdentifierName();
                 expr = this.finalize(node, new Node.StaticMemberExpression(expr, property));
 
-            } else if (this.lookahead.type === Token.Template && this.lookahead.head) {
-                const quasi = this.parseTemplateLiteral();
-                expr = this.finalize(node, new Node.TaggedTemplateExpression(expr, quasi));
-
             } else {
                 break;
             }
@@ -1343,9 +1257,6 @@ export class Parser {
             const node = this.startNode(startToken);
             const token = this.nextToken();
             expr = this.inheritCoverGrammar(this.parseUnaryExpression);
-            if (this.context.strict && expr.type === Syntax.Identifier && this.scanner.isRestrictedWord(expr.name)) {
-                this.tolerateError(Messages.StrictLHSPrefix);
-            }
             if (!this.context.isAssignmentTarget) {
                 this.tolerateError(Messages.InvalidLHSInAssignment);
             }
@@ -1357,9 +1268,6 @@ export class Parser {
             expr = this.inheritCoverGrammar(this.parseLeftHandSideExpressionAllowCall);
             if (!this.hasLineTerminator && this.lookahead.type === Token.Punctuator) {
                 if (this.match('++') || this.match('--')) {
-                    if (this.context.strict && expr.type === Syntax.Identifier && this.scanner.isRestrictedWord(expr.name)) {
-                        this.tolerateError(Messages.StrictLHSPostfix);
-                    }
                     if (!this.context.isAssignmentTarget) {
                         this.tolerateError(Messages.InvalidLHSInAssignment);
                     }
@@ -1393,9 +1301,6 @@ export class Parser {
             const token = this.nextToken();
             expr = this.inheritCoverGrammar(this.parseUnaryExpression);
             expr = this.finalize(node, new Node.UnaryExpression(token.value, expr));
-            if (this.context.strict && expr.operator === 'delete' && expr.argument.type === Syntax.Identifier) {
-                this.tolerateError(Messages.StrictDelete);
-            }
             this.context.isAssignmentTarget = false;
             this.context.isBindingElement = false;
         } else if (this.context.await && this.matchContextualKeyword('await')) {
@@ -1600,7 +1505,7 @@ export class Parser {
             params[i] = param;
         }
 
-        if (this.context.strict || !this.context.allowYield) {
+        if (!this.context.allowYield) {
             for (let i = 0; i < params.length; ++i) {
                 const param = params[i];
                 if (param.type === Syntax.YieldExpression) {
@@ -1609,16 +1514,9 @@ export class Parser {
             }
         }
 
-        if (options.message === Messages.StrictParamDupe) {
-            const token = this.context.strict ? options.stricted : options.firstRestricted;
-            this.throwUnexpectedToken(token, options.message);
-        }
-
         return {
             simple: options.simple,
             params: params,
-            stricted: options.stricted,
-            firstRestricted: options.firstRestricted,
             message: options.message
         };
     }
@@ -1659,10 +1557,6 @@ export class Parser {
                     }
                     this.context.firstCoverInitializedNameError = null;
 
-                    const previousStrict = this.context.strict;
-                    const previousAllowStrictDirective = this.context.allowStrictDirective;
-                    this.context.allowStrictDirective = list.simple;
-
                     const previousAllowYield = this.context.allowYield;
                     const previousAwait = this.context.await;
                     this.context.allowYield = true;
@@ -1681,17 +1575,9 @@ export class Parser {
                     }
                     const expression = body.type !== Syntax.BlockStatement;
 
-                    if (this.context.strict && list.firstRestricted) {
-                        this.throwUnexpectedToken(list.firstRestricted, list.message);
-                    }
-                    if (this.context.strict && list.stricted) {
-                        this.tolerateUnexpectedToken(list.stricted, list.message);
-                    }
                     expr = isAsync ? this.finalize(node, new Node.AsyncArrowFunctionExpression(list.params, body, expression)) :
                         this.finalize(node, new Node.ArrowFunctionExpression(list.params, body, expression));
 
-                    this.context.strict = previousStrict;
-                    this.context.allowStrictDirective = previousAllowStrictDirective;
                     this.context.allowYield = previousAllowYield;
                     this.context.await = previousAwait;
                 }
@@ -1700,16 +1586,6 @@ export class Parser {
                 if (this.matchAssign()) {
                     if (!this.context.isAssignmentTarget) {
                         this.tolerateError(Messages.InvalidLHSInAssignment);
-                    }
-
-                    if (this.context.strict && expr.type === Syntax.Identifier) {
-                        const id = expr as Node.Identifier;
-                        if (this.scanner.isRestrictedWord(id.name)) {
-                            this.tolerateUnexpectedToken(token, Messages.StrictLHSAssignment);
-                        }
-                        if (this.scanner.isStrictModeReservedWord(id.name)) {
-                            this.tolerateUnexpectedToken(token, Messages.StrictReservedWord);
-                        }
                     }
 
                     if (!this.match('=')) {
@@ -1757,48 +1633,32 @@ export class Parser {
     // https://tc39.github.io/ecma262/#sec-block
 
     parseStatementListItem(): Node.StatementListItem {
-        let statement: Node.StatementListItem;
         this.context.isAssignmentTarget = true;
         this.context.isBindingElement = true;
         if (this.lookahead.type === Token.Keyword) {
             switch (this.lookahead.value) {
                 case 'export':
-                    if (!this.context.isModule) {
-                        this.tolerateUnexpectedToken(this.lookahead, Messages.IllegalExportDeclaration);
-                    }
-                    statement = this.parseExportDeclaration();
-                    break;
+                    return this.parseExportDeclaration();
                 case 'import':
                     if (this.matchImportCall()) {
-                        statement = this.parseExpressionStatement();
+                        return this.parseExpressionStatement();
                     } else {
-                        if (!this.context.isModule) {
-                            this.tolerateUnexpectedToken(this.lookahead, Messages.IllegalImportDeclaration);
-                        }
-                        statement = this.parseImportDeclaration();
+                        return this.parseImportDeclaration();
                     }
-                    break;
                 case 'const':
-                    statement = this.parseLexicalDeclaration({ inFor: false });
-                    break;
+                    return this.parseLexicalDeclaration({ inFor: false });
                 case 'function':
-                    statement = this.parseFunctionDeclaration();
-                    break;
+                    return this.parseFunctionDeclaration();
                 case 'class':
-                    statement = this.parseClassDeclaration();
-                    break;
+                    return this.parseClassDeclaration();
                 case 'let':
-                    statement = this.isLexicalDeclaration() ? this.parseLexicalDeclaration({ inFor: false }) : this.parseStatement();
-                    break;
+                    return this.isLexicalDeclaration() ? this.parseLexicalDeclaration({ inFor: false }) : this.parseStatement();
                 default:
-                    statement = this.parseStatement();
-                    break;
+                    return this.parseStatement();
             }
         } else {
-            statement = this.parseStatement();
+            return this.parseStatement();
         }
-
-        return statement;
     }
 
     parseBlock(): Node.BlockStatement {
@@ -1823,12 +1683,6 @@ export class Parser {
         const node = this.createNode();
         const params = [];
         const id = this.parsePattern(params, kind);
-
-        if (this.context.strict && id.type === Syntax.Identifier) {
-            if (this.scanner.isRestrictedWord((id as Node.Identifier).name)) {
-                this.tolerateError(Messages.StrictVarName);
-            }
-        }
 
         let init: Node.Expression | null = null;
         if (kind === 'const') {
@@ -2029,18 +1883,12 @@ export class Parser {
 
         const token = this.nextToken();
         if (token.type === Token.Keyword && token.value === 'yield') {
-            if (this.context.strict) {
-                this.tolerateUnexpectedToken(token, Messages.StrictReservedWord);
-            } else if (!this.context.allowYield) {
+            if (!this.context.allowYield) {
                 this.throwUnexpectedToken(token);
             }
         } else if (token.type !== Token.Identifier) {
-            if (this.context.strict && token.type === Token.Keyword && this.scanner.isStrictModeReservedWord(token.value as string)) {
-                this.tolerateUnexpectedToken(token, Messages.StrictReservedWord);
-            } else {
-                if (this.context.strict || token.value !== 'let' || kind !== 'var') {
-                    this.throwUnexpectedToken(token);
-                }
+            if (token.value !== 'let' || kind !== 'var') {
+                this.throwUnexpectedToken(token);
             }
         } else if ((this.context.isModule || this.context.await) && token.type === Token.Identifier && token.value === 'await') {
             this.tolerateUnexpectedToken(token);
@@ -2054,12 +1902,6 @@ export class Parser {
 
         const params = [];
         const id = this.parsePattern(params, 'var');
-
-        if (this.context.strict && id.type === Syntax.Identifier) {
-            if (this.scanner.isRestrictedWord((id as Node.Identifier).name)) {
-                this.tolerateError(Messages.StrictVarName);
-            }
-        }
 
         let init = null;
         if (this.match('=')) {
@@ -2114,9 +1956,6 @@ export class Parser {
     // https://tc39.github.io/ecma262/#sec-if-statement
 
     parseIfClause(): Node.Statement {
-        if (this.context.strict && this.matchKeyword('function')) {
-            this.tolerateError(Messages.StrictFunction);
-        }
         return this.parseStatement();
     }
 
@@ -2224,7 +2063,7 @@ export class Parser {
 
                 if (declarations.length === 1 && this.matchKeyword('in')) {
                     const decl = declarations[0];
-                    if (decl.init && (decl.id.type === Syntax.ArrayPattern || decl.id.type === Syntax.ObjectPattern || this.context.strict)) {
+                    if (decl.init && (decl.id.type === Syntax.ArrayPattern || decl.id.type === Syntax.ObjectPattern)) {
                         this.tolerateError(Messages.ForInOfLoopInitializer, 'for-in');
                     }
                     init = this.finalize(init, new Node.VariableDeclaration(declarations, 'var'));
@@ -2247,7 +2086,7 @@ export class Parser {
                 init = this.createNode();
                 const kind = this.nextToken().value as string;
 
-                if (!this.context.strict && this.lookahead.value === 'in') {
+                if (this.lookahead.value === 'in') {
                     init = this.finalize(init, new Node.Identifier(kind));
                     this.nextToken();
                     left = init;
@@ -2419,10 +2258,6 @@ export class Parser {
     // https://tc39.github.io/ecma262/#sec-with-statement
 
     parseWithStatement(): Node.WithStatement {
-        if (this.context.strict) {
-            this.tolerateError(Messages.StrictModeWith);
-        }
-
         const node = this.createNode();
         let body;
 
@@ -2525,9 +2360,7 @@ export class Parser {
             } else if (this.matchKeyword('function')) {
                 const token = this.lookahead;
                 const declaration = this.parseFunctionDeclaration();
-                if (this.context.strict) {
-                    this.tolerateUnexpectedToken(token, Messages.StrictFunction);
-                } else if (declaration.generator) {
+                if (declaration.generator) {
                     this.tolerateUnexpectedToken(token, Messages.GeneratorInLegacyContext);
                 }
                 body = declaration;
@@ -2584,12 +2417,6 @@ export class Parser {
             paramMap[key] = true;
         }
 
-        if (this.context.strict && param.type === Syntax.Identifier) {
-            if (this.scanner.isRestrictedWord((param as Node.Identifier).name)) {
-                this.tolerateError(Messages.StrictCatchVariable);
-            }
-        }
-
         this.expect(')');
         const body = this.parseBlock();
 
@@ -2634,7 +2461,6 @@ export class Parser {
             case Token.NullLiteral:
             case Token.NumericLiteral:
             case Token.StringLiteral:
-            case Token.Template:
                 statement = this.parseExpressionStatement();
                 break;
 
@@ -2718,7 +2544,6 @@ export class Parser {
         const node = this.createNode();
 
         this.expect('{');
-        const body = this.parseDirectivePrologues();
 
         const previousLabelSet = this.context.labelSet;
         const previousInIteration = this.context.inIteration;
@@ -2730,6 +2555,7 @@ export class Parser {
         this.context.inSwitch = false;
         this.context.inFunctionBody = true;
 
+        const body: Node.StatementListItem[] = [];
         while (this.lookahead.type !== Token.EOF) {
             if (this.match('}')) {
                 break;
@@ -2749,27 +2575,6 @@ export class Parser {
 
     validateParam(options, param, name) {
         const key = '$' + name;
-        if (this.context.strict) {
-            if (this.scanner.isRestrictedWord(name)) {
-                options.stricted = param;
-                options.message = Messages.StrictParamName;
-            }
-            if (Object.prototype.hasOwnProperty.call(options.paramSet, key)) {
-                options.stricted = param;
-                options.message = Messages.StrictParamDupe;
-            }
-        } else if (!options.firstRestricted) {
-            if (this.scanner.isRestrictedWord(name)) {
-                options.firstRestricted = param;
-                options.message = Messages.StrictParamName;
-            } else if (this.scanner.isStrictModeReservedWord(name)) {
-                options.firstRestricted = param;
-                options.message = Messages.StrictReservedWord;
-            } else if (Object.prototype.hasOwnProperty.call(options.paramSet, key)) {
-                options.stricted = param;
-                options.message = Messages.StrictParamDupe;
-            }
-        }
 
         /* istanbul ignore next */
         if (typeof Object.defineProperty === 'function') {
@@ -2804,13 +2609,12 @@ export class Parser {
         options.params.push(param);
     }
 
-    parseFormalParameters(firstRestricted?) {
+    parseFormalParameters() {
         let options;
 
         options = {
             simple: true,
             params: [],
-            firstRestricted: firstRestricted
         };
 
         this.expect('(');
@@ -2832,8 +2636,6 @@ export class Parser {
         return {
             simple: options.simple,
             params: options.params,
-            stricted: options.stricted,
-            firstRestricted: options.firstRestricted,
             message: options.message
         };
     }
@@ -2869,24 +2671,10 @@ export class Parser {
 
         let message;
         let id: Node.Identifier | null = null;
-        let firstRestricted: RawToken | null = null;
 
         if (!identifierIsOptional || !this.match('(')) {
             const token = this.lookahead;
             id = this.parseVariableIdentifier();
-            if (this.context.strict) {
-                if (this.scanner.isRestrictedWord(token.value as string)) {
-                    this.tolerateUnexpectedToken(token, Messages.StrictFunctionName);
-                }
-            } else {
-                if (this.scanner.isRestrictedWord(token.value as string)) {
-                    firstRestricted = token;
-                    message = Messages.StrictFunctionName;
-                } else if (this.scanner.isStrictModeReservedWord(token.value as string)) {
-                    firstRestricted = token;
-                    message = Messages.StrictReservedWord;
-                }
-            }
         }
 
         const previousAllowAwait = this.context.await;
@@ -2894,27 +2682,14 @@ export class Parser {
         this.context.await = isAsync;
         this.context.allowYield = !isGenerator;
 
-        const formalParameters = this.parseFormalParameters(firstRestricted);
+        const formalParameters = this.parseFormalParameters();
         const params = formalParameters.params;
-        const stricted = formalParameters.stricted;
-        firstRestricted = formalParameters.firstRestricted;
         if (formalParameters.message) {
             message = formalParameters.message;
         }
 
-        const previousStrict = this.context.strict;
-        const previousAllowStrictDirective = this.context.allowStrictDirective;
-        this.context.allowStrictDirective = formalParameters.simple;
         const body = this.parseFunctionSourceElements();
-        if (this.context.strict && firstRestricted) {
-            this.throwUnexpectedToken(firstRestricted, message);
-        }
-        if (this.context.strict && stricted) {
-            this.tolerateUnexpectedToken(stricted, message);
-        }
 
-        this.context.strict = previousStrict;
-        this.context.allowStrictDirective = previousAllowStrictDirective;
         this.context.await = previousAllowAwait;
         this.context.allowYield = previousAllowYield;
 
@@ -2939,7 +2714,6 @@ export class Parser {
 
         let message;
         let id: Node.Identifier | null = null;
-        let firstRestricted;
 
         const previousAllowAwait = this.context.await;
         const previousAllowYield = this.context.allowYield;
@@ -2948,95 +2722,22 @@ export class Parser {
 
         if (!this.match('(')) {
             const token = this.lookahead;
-            id = (!this.context.strict && !isGenerator && this.matchKeyword('yield')) ? this.parseIdentifierName() : this.parseVariableIdentifier();
-            if (this.context.strict) {
-                if (this.scanner.isRestrictedWord(token.value as string)) {
-                    this.tolerateUnexpectedToken(token, Messages.StrictFunctionName);
-                }
-            } else {
-                if (this.scanner.isRestrictedWord(token.value as string)) {
-                    firstRestricted = token;
-                    message = Messages.StrictFunctionName;
-                } else if (this.scanner.isStrictModeReservedWord(token.value as string)) {
-                    firstRestricted = token;
-                    message = Messages.StrictReservedWord;
-                }
-            }
+            id = (!isGenerator && this.matchKeyword('yield')) ? this.parseIdentifierName() : this.parseVariableIdentifier();
         }
 
-        const formalParameters = this.parseFormalParameters(firstRestricted);
+        const formalParameters = this.parseFormalParameters();
         const params = formalParameters.params;
-        const stricted = formalParameters.stricted;
-        firstRestricted = formalParameters.firstRestricted;
         if (formalParameters.message) {
             message = formalParameters.message;
         }
 
-        const previousStrict = this.context.strict;
-        const previousAllowStrictDirective = this.context.allowStrictDirective;
-        this.context.allowStrictDirective = formalParameters.simple;
         const body = this.parseFunctionSourceElements();
-        if (this.context.strict && firstRestricted) {
-            this.throwUnexpectedToken(firstRestricted, message);
-        }
-        if (this.context.strict && stricted) {
-            this.tolerateUnexpectedToken(stricted, message);
-        }
-        this.context.strict = previousStrict;
-        this.context.allowStrictDirective = previousAllowStrictDirective;
+
         this.context.await = previousAllowAwait;
         this.context.allowYield = previousAllowYield;
 
         return isAsync ? this.finalize(node, new Node.AsyncFunctionExpression(id, params, body)) :
             this.finalize(node, new Node.FunctionExpression(id, params, body, isGenerator));
-    }
-
-    // https://tc39.github.io/ecma262/#sec-directive-prologues-and-the-use-strict-directive
-
-    parseDirective(): Node.Directive | Node.ExpressionStatement {
-        const token = this.lookahead;
-
-        const node = this.createNode();
-        const expr = this.parseExpression();
-        const directive = (expr.type === Syntax.Literal) ? this.getTokenRaw(token).slice(1, -1) : null;
-        this.consumeSemicolon();
-
-        return this.finalize(node, directive ? new Node.Directive(expr, directive) : new Node.ExpressionStatement(expr));
-    }
-
-    parseDirectivePrologues(): Node.Statement[] {
-        let firstRestricted: RawToken | null = null;
-
-        const body: Node.Statement[] = [];
-        while (true) {
-            const token = this.lookahead;
-            if (token.type !== Token.StringLiteral) {
-                break;
-            }
-
-            const statement = this.parseDirective();
-            body.push(statement);
-            const directive = (statement as Node.Directive).directive;
-            if (typeof directive !== 'string') {
-                break;
-            }
-
-            if (directive === 'use strict') {
-                this.context.strict = true;
-                if (firstRestricted) {
-                    this.tolerateUnexpectedToken(firstRestricted, Messages.StrictOctalLiteral);
-                }
-                if (!this.context.allowStrictDirective) {
-                    this.tolerateUnexpectedToken(token, Messages.IllegalLanguageModeDirective);
-                }
-            } else {
-                if (!firstRestricted && token.octal) {
-                    firstRestricted = token;
-                }
-            }
-        }
-
-        return body;
     }
 
     // https://tc39.github.io/ecma262/#sec-method-definitions
@@ -3287,8 +2988,6 @@ export class Parser {
     parseClassDeclaration(identifierIsOptional?: boolean): Node.ClassDeclaration {
         const node = this.createNode();
 
-        const previousStrict = this.context.strict;
-        this.context.strict = true;
         this.expectKeyword('class');
 
         const id = (identifierIsOptional && (this.lookahead.type !== Token.Identifier)) ? null : this.parseVariableIdentifier();
@@ -3298,7 +2997,6 @@ export class Parser {
             superClass = this.isolateCoverGrammar(this.parseLeftHandSideExpressionAllowCall);
         }
         const classBody = this.parseClassBody();
-        this.context.strict = previousStrict;
 
         return this.finalize(node, new Node.ClassDeclaration(id, superClass, classBody));
     }
@@ -3306,8 +3004,6 @@ export class Parser {
     parseClassExpression(): Node.ClassExpression {
         const node = this.createNode();
 
-        const previousStrict = this.context.strict;
-        this.context.strict = true;
         this.expectKeyword('class');
         const id = (this.lookahead.type === Token.Identifier) ? this.parseVariableIdentifier() : null;
         let superClass: Node.Identifier | null = null;
@@ -3316,7 +3012,6 @@ export class Parser {
             superClass = this.isolateCoverGrammar(this.parseLeftHandSideExpressionAllowCall);
         }
         const classBody = this.parseClassBody();
-        this.context.strict = previousStrict;
 
         return this.finalize(node, new Node.ClassExpression(id, superClass, classBody));
     }
@@ -3325,10 +3020,9 @@ export class Parser {
     // https://tc39.github.io/ecma262/#sec-modules
 
     parseModule(): Node.Module {
-        this.context.strict = true;
         this.context.isModule = true;
         const node = this.createNode();
-        const body = this.parseDirectivePrologues();
+        const body: Node.StatementListItem[] = [];
         while (this.lookahead.type !== Token.EOF) {
             body.push(this.parseStatementListItem());
         }
@@ -3337,7 +3031,7 @@ export class Parser {
 
     parseScript(): Node.Script {
         const node = this.createNode();
-        const body = this.parseDirectivePrologues();
+        const body: Node.StatementListItem[] = [];
         while (this.lookahead.type !== Token.EOF) {
             body.push(this.parseStatementListItem());
         }

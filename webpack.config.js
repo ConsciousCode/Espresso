@@ -1,9 +1,9 @@
 module.exports = {
-    entry:  __dirname + "/src/esprima.js",
+    entry:  __dirname + "/src/espresso.js",
     output: {
         path:  __dirname + "/dist",
-        filename: "esprima.js",
+        filename: "espresso.js",
         libraryTarget: "umd",
-        library: "esprima"
+        library: "espresso"
     }
 }

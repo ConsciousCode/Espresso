@@ -104,9 +104,9 @@ export class Scanner {
         this.errorHandler.tolerateError(this.index, this.lineNumber,
             this.index - this.lineStart + 1, message);
     }
-    
+
     private scanLineTerminator(ch) {
-    	// 0x0D is \r, 0x0a is \n
+        // 0x0D is \r, 0x0a is \n
         if (ch === 0x0D && this.source.charCodeAt(this.index + 1) === 0x0A) {
             ++this.index;
         }
@@ -195,12 +195,12 @@ export class Scanner {
         while (!this.eof()) {
             let ch = this.source.charCodeAt(this.index);
             if (Character.isLineTerminator(ch)) {
-            	this.scanLineTerminator(ch);
-            // 0x23 is #, process inner comment
+                this.scanLineTerminator(ch);
+                // 0x23 is #, process inner comment
             } else if (ch === 0x23) {
-            	this.skipComment(
-            		hier, this.source.charCodeAt(this.index + 1)
-            	);
+                this.skipComment(
+                    hier, this.source.charCodeAt(this.index + 1)
+                );
             } else if (ch === hier[hier.length - 1]) {
                 // Block comment ends with '<close>#'.
                 // 0x23 is #
@@ -245,9 +245,9 @@ export class Scanner {
         this.tolerateUnexpectedToken();
         return comments;
     }
-    
+
     public skipComment(hier, ch) {
-    	let comment;
+        let comment;
         switch (ch) {
             case 0x28: // (
                 this.index += 2;
@@ -268,9 +268,9 @@ export class Scanner {
                 this.index += 1;
                 return this.skipSingleLineComment(1);
         }
-        
+
         hier.pop();
-        
+
         return comment;
     }
 
@@ -319,27 +319,6 @@ export class Scanner {
             default:
                 return false;
         }
-    }
-
-    public isStrictModeReservedWord(id: string): boolean {
-        switch (id) {
-            case 'implements':
-            case 'interface':
-            case 'package':
-            case 'private':
-            case 'protected':
-            case 'public':
-            case 'static':
-            case 'yield':
-            case 'let':
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    public isRestrictedWord(id: string): boolean {
-        return id === 'eval' || id === 'arguments';
     }
 
     // https://tc39.github.io/ecma262/#sec-keywords
@@ -518,7 +497,7 @@ export class Scanner {
             type = Token.Identifier;
         } else if (this.isKeyword(id)) {
             type = Token.Keyword;
-        } else if (id === 'null') {
+        } else if (id === 'nil') {
             type = Token.NullLiteral;
         } else if (id === 'true' || id === 'false') {
             type = Token.BooleanLiteral;
@@ -593,7 +572,7 @@ export class Scanner {
 
                     // 3-character punctuators.
                     str = str.substr(0, 3);
-                    if (str === '===' || str === '!==' || str === '>>>' ||
+                    if (str === '>>>' ||
                         str === '<<=' || str === '>>=' || str === '**=') {
                         this.index += 3;
                     } else {
@@ -631,30 +610,28 @@ export class Scanner {
             end: this.index
         };
     }
-    
+
     /**
      * Scan spaces in literal tokens and return true if something
      *  was skipped.
     **/
     private scanLiteralSpace(ch: number) {
-   		if (!Character.isWhiteSpace(ch)) {
-   			console.log("FALSE", this.index);
-   			return false;
-   		}
-   		
-   		do {
-   			console.log("Space", ch, this.index);
-			if (Character.isLineTerminator(ch)) {
-				this.scanLineTerminator(ch);
-			}
-			else {
-				++this.index;
-			}
-			
-			ch = this.source.charCodeAt(this.index);
-		} while (Character.isWhiteSpace(ch));
-		
-		return true;
+        if (!Character.isWhiteSpace(ch)) {
+            return false;
+        }
+
+        do {
+            if (Character.isLineTerminator(ch)) {
+                this.scanLineTerminator(ch);
+            }
+            else {
+                ++this.index;
+            }
+
+            ch = this.source.charCodeAt(this.index);
+        } while (Character.isWhiteSpace(ch));
+
+        return true;
     }
 
     // https://tc39.github.io/ecma262/#sec-literals-numeric-literals
@@ -663,15 +640,15 @@ export class Scanner {
         let num = '';
 
         while (!this.eof()) {
-        	let ch = this.source.charCodeAt(this.index);
-        	
-        	if (this.scanLiteralSpace(ch)) {
-	        	continue;
-	        }
+            let ch = this.source.charCodeAt(this.index);
+
+            if (this.scanLiteralSpace(ch)) {
+                continue;
+            }
             else if (!Character.isHexDigit(this.source.charCodeAt(this.index))) {
                 break;
             }
-            
+
             num += this.source[this.index++];
         }
 
@@ -699,15 +676,15 @@ export class Scanner {
 
         while (!this.eof()) {
             ch = this.source.charCodeAt(this.index);
-            
-        	if (this.scanLiteralSpace(ch)) {
-	        	continue;
-	        }
-	        // 0x30 == '0', 0x31 == '1'
+
+            if (this.scanLiteralSpace(ch)) {
+                continue;
+            }
+            // 0x30 == '0', 0x31 == '1'
             else if (ch !== 0x30 && ch !== 0x31) {
                 break;
             }
-            
+
             num += this.source[this.index++];
         }
 
@@ -746,14 +723,14 @@ export class Scanner {
         }
 
         while (!this.eof()) {
-        	let ch = this.source.charCodeAt(this.index);
-        	if (this.scanLiteralSpace(ch)) {
-        		continue;
-        	}
+            let ch = this.source.charCodeAt(this.index);
+            if (this.scanLiteralSpace(ch)) {
+                continue;
+            }
             else if (!Character.isOctalDigit(ch)) {
                 break;
             }
-            
+
             num += this.source[this.index++];
         }
 
@@ -791,10 +768,10 @@ export class Scanner {
             // Octal number in ES6 starts with '0o'.
             // Binary number in ES6 starts with '0b'.
             if (num === '0') {
-            	this.scanLiteralSpace(
-            		this.source.charCodeAt(this.index)
-            	);
-	            ch = this.source[this.index];
+                this.scanLiteralSpace(
+                    this.source.charCodeAt(this.index)
+                );
+                ch = this.source[this.index];
                 if (ch === 'x' || ch === 'X') {
                     ++this.index;
                     return this.scanHexLiteral(start);
@@ -809,14 +786,14 @@ export class Scanner {
             }
 
             while (!this.eof()) {
-            	let cc = this.source.charCodeAt(this.index);
-            	if (this.scanLiteralSpace(cc)) {
-            		continue;
-            	}
-            	else if (!Character.isDecimalDigit(this.source.charCodeAt(this.index))) {
-            		break;
-            	}
-            	
+                let cc = this.source.charCodeAt(this.index);
+                if (this.scanLiteralSpace(cc)) {
+                    continue;
+                }
+                else if (!Character.isDecimalDigit(this.source.charCodeAt(this.index))) {
+                    break;
+                }
+
                 num += this.source[this.index++];
             }
             ch = this.source[this.index];
@@ -876,21 +853,21 @@ export class Scanner {
             let ch = this.source[this.index++];
 
             if (ch === quote) {
-            	this.scanLiteralSpace(
-            		this.source.charCodeAt(this.index)
-            	);
-            	ch = this.source[this.index++];
-            	
-            	// Concatenate adjacent string literals
-            	// TODO: Enable comments between them
-            	if (ch === "'" || ch === '"' || ch === '`') {
-            		quote = ch;
-            		continue;
-            	}
-            	else {
-		            quote = '';
-		            break;
-		        }
+                this.scanLiteralSpace(
+                    this.source.charCodeAt(this.index)
+                );
+                ch = this.source[this.index++];
+
+                // Concatenate adjacent string literals
+                // TODO: Enable comments between them
+                if (ch === "'" || ch === '"' || ch === '`') {
+                    quote = ch;
+                    continue;
+                }
+                else {
+                    quote = '';
+                    break;
+                }
             } else if (ch === '\\') {
                 ch = this.source[this.index++];
                 if (!ch || !Character.isLineTerminator(ch.charCodeAt(0))) {
@@ -916,12 +893,12 @@ export class Scanner {
                             break;
                         case 'a':
                         case "G":
-                        	str += '\x07';
-                        	break;
+                            str += '\x07';
+                            break;
                         case 'e':
                         case '[':
-                        	str += '\x1b';
-                        	break;
+                            str += '\x1b';
+                            break;
                         case 'n':
                         case "J":
                             str += '\n';
@@ -951,90 +928,90 @@ export class Scanner {
                             str += ch;
                             this.tolerateUnexpectedToken();
                             break;
-                        
+
                         // Extra escapes not normally included
                         case "@": // NUL
-                        	str += '\x00';
-                        	break;
+                            str += '\x00';
+                            break;
                         case "A": // SOH
-                        	str += '\x01';
-                        	break;
+                            str += '\x01';
+                            break;
                         case "B": // STX
-                        	str += '\x02';
-                        	break;
+                            str += '\x02';
+                            break;
                         case "C": // ETX
-                        	str += '\x03';
-                        	break;
+                            str += '\x03';
+                            break;
                         case "D": // EOT
-                        	str += '\x04';
-                        	break;
+                            str += '\x04';
+                            break;
                         case "E": // ENQ
-                        	str += '\x05';
-                        	break;
+                            str += '\x05';
+                            break;
                         case "F": // ACK
-                        	str += '\x06';
-                        	break;
+                            str += '\x06';
+                            break;
                         // G, H, I, J, K, L, M handled above
                         case "N": // Shift Out
-                        	str += '\x0e';
-                        	break;
+                            str += '\x0e';
+                            break;
                         case "O": // Shift In
-                        	str += '\x0f';
-                        	break;
+                            str += '\x0f';
+                            break;
                         case "P": // DLE
-                        	str += '\x10'
-                        	break;
+                            str += '\x10'
+                            break;
                         case "Q": // DC1
-                        	str += '\x11';
-                        	break;
+                            str += '\x11';
+                            break;
                         case "R": // DC2
-                        	str += '\x12';
-                        	break;
+                            str += '\x12';
+                            break;
                         case "S": // DC3
-                        	str += '\x13';
-                        	break;
+                            str += '\x13';
+                            break;
                         case "T": // DC4
-                        	str += '\x14';
-                        	break;
+                            str += '\x14';
+                            break;
                         case "U": // NAK
-                        	str += '\x15';
-                        	break;
+                            str += '\x15';
+                            break;
                         case "V": // SYN
-                        	str += '\x16';
-                        	break;
+                            str += '\x16';
+                            break;
                         case "W": // ETB
-                        	str += '\x17';
-                        	break;
+                            str += '\x17';
+                            break;
                         case "X": // CAN
-                        	str += '\x18';
-                        	break;
+                            str += '\x18';
+                            break;
                         case "Y": // End of Medium
-                        	str += '\x19';
-                        	break;
+                            str += '\x19';
+                            break;
                         case "Z": // SUB
-                        	str += '\x1a';
-                        	break;
+                            str += '\x1a';
+                            break;
                         // Got [
                         case '|': // File Separator
-                        	// Traditionally this is ^\, which would
-                        	//  translate to \\, but that's taken
-                        	str += '\x1c';
-                        	break;
+                            // Traditionally this is ^\, which would
+                            //  translate to \\, but that's taken
+                            str += '\x1c';
+                            break;
                         case ']': // Group Separator
-                        	str += '\x1d';
-                        	break;
+                            str += '\x1d';
+                            break;
                         case "^": // Record Separator
-                        	str += '\x1e';
-                        	break;
+                            str += '\x1e';
+                            break;
                         case "_": // Unit Separator
-                        	str += '\x1f';
-                        	break;
+                            str += '\x1f';
+                            break;
                         case "?":
-                        	str += '\x7f';
-                        	break;
-                        
+                            str += '\x7f';
+                            break;
+
                         default:
-                        	str += ch;
+                            str += ch;
                             break;
                     }
                 } else {
@@ -1045,7 +1022,7 @@ export class Scanner {
                     this.lineStart = this.index;
                 }
             } else if (Character.isLineTerminator(ch.charCodeAt(0))) {
-            	str += '\n';
+                str += '\n';
             } else {
                 str += ch;
             }
@@ -1065,7 +1042,7 @@ export class Scanner {
             start: start,
             end: this.index
         };
-    }33
+    } 33
 
     public lex(): RawToken {
         if (this.eof()) {

@@ -53,7 +53,6 @@ interface ScannerState {
 }
 
 export class Scanner {
-
     readonly source: string;
     readonly errorHandler: ErrorHandler;
     trackComment: boolean;
@@ -307,20 +306,6 @@ export class Scanner {
         return comments;
     }
 
-    // https://tc39.github.io/ecma262/#sec-future-reserved-words
-
-    public isFutureReservedWord(id: string): boolean {
-        switch (id) {
-            case 'enum':
-            case 'export':
-            case 'import':
-            case 'super':
-                return true;
-            default:
-                return false;
-        }
-    }
-
     // https://tc39.github.io/ecma262/#sec-keywords
 
     private isKeyword(id: string): boolean {
@@ -332,18 +317,18 @@ export class Scanner {
                     (id === 'try') || (id === 'let');
             case 4:
                 return (id === 'this') || (id === 'else') || (id === 'case') ||
-                    (id === 'void') || (id === 'with') || (id === 'enum');
+                    (id === 'with') || (id === 'enum');
             case 5:
                 return (id === 'while') || (id === 'break') || (id === 'catch') ||
                     (id === 'throw') || (id === 'const') || (id === 'yield') ||
                     (id === 'class') || (id === 'super');
             case 6:
-                return (id === 'return') || (id === 'typeof') || (id === 'delete') ||
+                return (id === 'return') || (id === 'delete') ||
                     (id === 'switch') || (id === 'export') || (id === 'import');
             case 7:
                 return (id === 'default') || (id === 'finally') || (id === 'extends');
             case 8:
-                return (id === 'function') || (id === 'continue') || (id === 'debugger');
+                return (id === 'function') || (id === 'continue');
             case 10:
                 return (id === 'instanceof');
             default:

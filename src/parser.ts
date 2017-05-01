@@ -198,19 +198,21 @@ export class Parser {
         let value;
         if (token) {
             if (!message) {
-                msg = (token.type === Token.EOF) ? Messages.UnexpectedEOS :
-                    (token.type === Token.Identifier) ? Messages.UnexpectedIdentifier :
-                        (token.type === Token.NumericLiteral) ? Messages.UnexpectedNumber :
-                            (token.type === Token.StringLiteral) ? Messages.UnexpectedString :
-                                Messages.UnexpectedToken;
-
-                if (token.type === Token.Keyword) {
-                    if (this.scanner.isFutureReservedWord(token.value)) {
-                        msg = Messages.UnexpectedReserved;
+                msg = (function(tt) {
+                    switch (tt) {
+                        case Token.EOF:
+                            return Messages.UnexpectedEOS;
+                        case Token.Identifier:
+                            return Messages.UnexpectedIdentifier;
+                        case Token.NumericLiteral:
+                            return Messages.UnexpectedNumber;
+                        case Token.StringLiteral:
+                            return Messages.UnexpectedString;
+                        default:
+                            return Messages.UnexpectedToken;
                     }
-                }
+                })(token.type);
             }
-
             value = token.value;
         } else {
             value = 'ILLEGAL';
@@ -1296,7 +1298,7 @@ export class Parser {
         let expr;
 
         if (this.match('+') || this.match('-') || this.match('~') || this.match('!') ||
-            this.matchKeyword('delete') || this.matchKeyword('void') || this.matchKeyword('typeof')) {
+            this.matchKeyword('delete')) {
             const node = this.startNode(this.lookahead);
             const token = this.nextToken();
             expr = this.inheritCoverGrammar(this.parseUnaryExpression);
@@ -2443,15 +2445,6 @@ export class Parser {
         return this.finalize(node, new Node.TryStatement(block, handler, finalizer));
     }
 
-    // https://tc39.github.io/ecma262/#sec-debugger-statement
-
-    parseDebuggerStatement(): Node.DebuggerStatement {
-        const node = this.createNode();
-        this.expectKeyword('debugger');
-        this.consumeSemicolon();
-        return this.finalize(node, new Node.DebuggerStatement());
-    }
-
     // https://tc39.github.io/ecma262/#sec-ecmascript-language-statements-and-declarations
 
     parseStatement(): Node.Statement {
@@ -2488,9 +2481,6 @@ export class Parser {
                         break;
                     case 'continue':
                         statement = this.parseContinueStatement();
-                        break;
-                    case 'debugger':
-                        statement = this.parseDebuggerStatement();
                         break;
                     case 'do':
                         statement = this.parseDoWhileStatement();
@@ -2825,8 +2815,7 @@ export class Parser {
             case Token.Keyword:
                 start = (value === 'class') || (value === 'delete') ||
                     (value === 'function') || (value === 'let') || (value === 'new') ||
-                    (value === 'super') || (value === 'this') || (value === 'typeof') ||
-                    (value === 'void') || (value === 'yield');
+                    (value === 'super') || (value === 'this') || (value === 'yield');
                 break;
 
             default:

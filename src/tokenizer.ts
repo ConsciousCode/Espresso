@@ -23,8 +23,8 @@ class Reader {
 
     // A function following one of those tokens is an expression.
     beforeFunctionExpression(t: string): boolean {
-        return ['(', '{', '[', 'in', 'typeof', 'instanceof', 'new',
-            'return', 'case', 'delete', 'throw', 'void',
+        return ['(', '{', '[', 'in', 'instanceof', 'new',
+            'return', 'case', 'delete', 'throw',
             // assignment operators
             '=', '+=', '-=', '*=', '**=', '/=', '%=', '<<=', '>>=', '>>>=',
             '&=', '|=', '^=', ',',

@@ -1,10 +1,12 @@
 (function webpackUniversalModuleDefinition(root, factory) {
 /* istanbul ignore next */
 /* istanbul ignore next */
+/* istanbul ignore next */
 	if(typeof exports === 'object' && typeof module === 'object')
 		module.exports = factory();
 	else if(typeof define === 'function' && define.amd)
 		define([], factory);
+/* istanbul ignore next */
 /* istanbul ignore next */
 /* istanbul ignore next */
 	else if(typeof exports === 'object')
@@ -20,6 +22,7 @@ return /******/ (function(modules) { // webpackBootstrap
 /******/ 	function __webpack_require__(moduleId) {
 /******/
 /******/ 		// Check if module is in cache
+/* istanbul ignore if */
 /* istanbul ignore if */
 /* istanbul ignore if */
 /******/ 		if(installedModules[moduleId]) {
@@ -5394,6 +5397,7 @@ exports.CommentHandler = CommentHandler;
 
 "use strict";
 
+/* istanbul ignore next */
 /* istanbul ignore next */
 /* istanbul ignore next */
 var __extends = (this && this.__extends) || (function () {

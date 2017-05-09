@@ -17,7 +17,6 @@
 		"nodes.ts",
 		"parser.ts",
 		"comment-handler.ts",
-		"xhtml-entities.ts",
 		"espresso.ts"
 	]
 }

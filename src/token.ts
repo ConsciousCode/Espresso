@@ -1,12 +1,12 @@
 export const enum Token {
-    BooleanLiteral = 1,
-    EOF,
-    Identifier,
-    Keyword,
-    NullLiteral,
-    NumericLiteral,
-    Punctuator,
-    StringLiteral
+	BooleanLiteral = 1,
+	EOF,
+	Identifier,
+	Keyword,
+	NullLiteral,
+	NumericLiteral,
+	Punctuator,
+	StringLiteral
 }
 
 export let TokenName = {};

@@ -4,8 +4,8 @@
 // Do NOT use this to enforce a certain condition on any user input.
 
 export function assert(condition: boolean, message: string): void {
-    /* istanbul ignore if */
-    if (!condition) {
-        throw new Error('ASSERT: ' + message);
-    }
+	/* istanbul ignore if */
+	if (!condition) {
+		throw new Error('ASSERT: ' + message);
+	}
 }

@@ -1,9 +1,9 @@
 {
   "extends": "tslint:recommended",
   "rules": {
-    "indent": [true, 4],
+    "indent": [true, "tabs"],
     "interface-name": false,
-    "max-line-length": false,
+    "max-line-length": 80,
     "member-access": false,
     "member-ordering": false,
     "no-use-before-declare": true,
@@ -13,6 +13,6 @@
     "prefer-for-of": false,
     "quotemark": [true, "single"],
     "trailing-comma": false,
-    "whitespace": [true, "check-branch", "check-decl", "check-operator", "check-separator", "check-type"]
+    "whitespace": [true, "check-decl", "check-operator", "check-separator", "check-type", "check-preblock"]
   }
 }

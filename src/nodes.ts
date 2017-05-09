@@ -13,13 +13,13 @@ export type Expression = ArrayExpression | ArrowFunctionExpression | AssignmentE
     AwaitExpression | BinaryExpression | CallExpression | ClassExpression | ComputedMemberExpression |
     ConditionalExpression | Identifier | FunctionExpression | Literal | NewExpression | ObjectExpression |
     RegexLiteral | SequenceExpression | StaticMemberExpression | TaggedTemplateExpression |
-    ThisExpression | UnaryExpression | UpdateExpression | YieldExpression;
+    ThisExpression | UnaryExpression | UpdateExpression | YieldExpression | Invalid;
 export type FunctionParameter = AssignmentPattern | BindingIdentifier | BindingPattern;
 export type ImportDeclarationSpecifier = ImportDefaultSpecifier | ImportNamespaceSpecifier | ImportSpecifier;
 export type ObjectExpressionProperty = Property | SpreadElement;
 export type ObjectPatternProperty = Property | RestElement;
 export type Statement = AsyncFunctionDeclaration | BreakStatement | ContinueStatement | DebuggerStatement | DoWhileStatement |
-    EmptyStatement | ExpressionStatement | Directive | ForStatement | ForInStatement | ForOfStatement |
+    EmptyStatement | ExpressionStatement | Directive | ForStatement |
     FunctionDeclaration | IfStatement | ReturnStatement | SwitchStatement | ThrowStatement |
     TryStatement | VariableDeclaration | WhileStatement | WithStatement;
 export type PropertyKey = Identifier | Literal;
@@ -27,6 +27,12 @@ export type PropertyValue = AssignmentPattern | AsyncFunctionExpression | Bindin
 export type StatementListItem = Declaration | Statement;
 
 /* tslint:disable:max-classes-per-file */
+
+/**
+ * Shim to keep the compiler from complaining while I replace old
+ *  functions that aren't being used.
+**/
+export class Invalid {}
 
 export class ArrayExpression {
     readonly type: string;
@@ -366,46 +372,16 @@ export class ExpressionStatement {
     }
 }
 
-export class ForInStatement {
-    readonly type: string;
-    readonly left: Expression;
-    readonly right: Expression;
-    readonly body: Statement;
-    readonly each: boolean;
-    constructor(left: Expression, right: Expression, body: Statement) {
-        this.type = Syntax.ForInStatement;
-        this.left = left;
-        this.right = right;
-        this.body = body;
-        this.each = false;
-    }
-}
-
-export class ForOfStatement {
-    readonly type: string;
-    readonly left: Expression;
-    readonly right: Expression;
-    readonly body: Statement;
-    constructor(left: Expression, right: Expression, body: Statement) {
-        this.type = Syntax.ForOfStatement;
-        this.left = left;
-        this.right = right;
-        this.body = body;
-    }
-}
-
 export class ForStatement {
     readonly type: string;
-    readonly init: Expression | null;
-    readonly test: Expression | null;
-    readonly update: Expression | null;
-    body: Statement;
-    constructor(init: Expression | null, test: Expression | null, update: Expression | null, body: Statement) {
+    readonly head: Expression;
+    body: Expression;
+    alt: Expression|null;
+    constructor(head: Expression, body: Expression, alt: Expression|null) {
         this.type = Syntax.ForStatement;
-        this.init = init;
-        this.test = test;
-        this.update = update;
+        this.head = head;
         this.body = body;
+        this.alt = alt;
     }
 }
 

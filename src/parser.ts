@@ -58,40 +58,60 @@ interface TokenEntry {
     loc?: SourceLocation;
 }
 
+/**
+ * Unary operator precedences.
+**/
 const UNARYOPS = {
-    "+": 20,
-    '-': 20,
-    "!": 20,
-    "~": 20
+    "+": 0x40, '-': 0x40,
+    "~": 0x41, "!": 0x41, 'not': 0x41,
+    "++": 0x42, "--": 0x42,
+    
+    "::": 0xa0, "@": 0xa2
 };
 
+/**
+ * Binary operation precedences.
+**/
 const BINARYOPS = {
     //    ')': 0,
-    ';': 0,
-    ',': 0,
-    '=': 0,
+    // Technical
+    ';': 0x00,
+    ',': 0x01,
+    '=': 0x01,
     //    ']': 0,
-
-    '||': 1,
-    '&&': 2,
-    '|': 3,
-    '^': 4,
-    '&': 5,
-    '==': 6,
-    '!=': 6,
-    '<': 7,
-    '>': 7,
-    '<=': 7,
-    '>=': 7,
-    '<<': 8,
-    '>>': 8,
-    '>>>': 8,
-    '+': 9,
-    '-': 9,
-    '*': 11,
-    '/': 11,
-    '%': 11
+	
+	// Boolean
+    '||': 0x10, 'or': 0x10,
+    '&&': 0x11, 'and': 0x11,
+    
+    // Comparisons
+    'in': 0x20, 'is': 0x20,
+    "<": 0x20, "<=": 0x20,
+    ">": 0x20, ">=": 0x20,
+    "==": 0x20, "!=": 0x20,
+    
+    // Arithmetic
+    '+': 0x30, '-': 0x30,
+    '*': 0x31, '/': 0x31, '%': 0x31,
+    
+    // (Unary ops)
+    
+    // Bitwise
+    '|': 0x50,
+    '^': 0x51,
+    '&': 0x52,
+    '<<': 0x53,
+    '>>': 0x53,
+    '>>>': 0x53,
+    
+    // Referencing
+    "::": 0xa0, '.': 0xa1
 };
+
+/**
+ * Operations that are right-associating
+**/
+const RIGHTOPS = [';'];
 
 export class Parser {
     readonly config: Config;
@@ -346,39 +366,16 @@ export class Parser {
         return t;
     }
 
-    nextToken(): RawToken {
-        const token = this.lookahead;
-
-        this.lastMarker.index = this.scanner.index;
-        this.lastMarker.line = this.scanner.lineNumber;
-        this.lastMarker.column = this.scanner.index - this.scanner.lineStart;
-
-        this.collectComments();
-
-        if (this.scanner.index !== this.startMarker.index) {
-            this.startMarker.index = this.scanner.index;
-            this.startMarker.line = this.scanner.lineNumber;
-            this.startMarker.column = this.scanner.index - this.scanner.lineStart;
-        }
-
-        const next = this.scanner.lex();
-        this.hasLineTerminator = (token.lineNumber !== next.lineNumber);
-
-        this.lookahead = next;
-
-        if (this.config.tokens && next.type !== Token.EOF) {
-            this.tokens.push(this.convertToken(next));
-        }
-
-        return token;
-    }
-
     createNode(): Marker {
         return {
             index: this.startMarker.index,
             line: this.startMarker.line,
             column: this.startMarker.column
         };
+    }
+    
+    getMarker(): Marker {
+    	return this.createNode();
     }
 
     startNode(token): Marker {
@@ -432,11 +429,17 @@ export class Parser {
     // Expect the next token to match the specified punctuator.
     // If not, an exception will be thrown.
 
-    expect(value) {
+    expect(type, value?) {
         const token = this.nextToken();
-        if (token.type !== Token.Punctuator || token.value !== value) {
+        if (token.type !== type || token.value !== value) {
             this.throwUnexpectedToken(token);
         }
+        
+        this.consumeToken();
+    }
+    
+    expectPunctuator(value) {
+    	return this.expect(Token.Punctuator, value);
     }
 
     // Quietly expect a comma when in tolerant mode, otherwise delegates to expect().
@@ -466,19 +469,20 @@ export class Parser {
             this.throwUnexpectedToken(token);
         }
     }
-
-    // Return true if the next token matches the specified punctuator.
-
-    match(value) {
-        return this.lookahead.type === Token.Punctuator && this.lookahead.value === value;
+    
+    match(type, value?) {
+    	let tok = this.nextToken();
+    	return tok.type === type && tok.value === value;
     }
-
-    // Return true if the next token matches the specified keyword
-
-    matchKeyword(keyword) {
-        return this.lookahead.type === Token.Keyword && this.lookahead.value === keyword;
+    
+    matchPunctuator(value) {
+    	return this.match(Token.Punctuator, value);
     }
-
+    
+    matchKeyword(value) {
+    	return this.match(Token.Keyword, value);
+    }
+    
     // Return true if the next token matches the specified contextual keyword
     // (where an identifier is sometimes a keyword depending on the context)
 
@@ -1603,7 +1607,7 @@ export class Parser {
 
                     const node = this.startNode(startToken);
                     this.expect('=>');
-                    let body: Node.BlockStatement | Node.Expression;
+                    let body: any;
                     if (this.match('{')) {
                         const previousAllowIn = this.context.allowIn;
                         this.context.allowIn = true;
@@ -1641,29 +1645,6 @@ export class Parser {
                     this.context.firstCoverInitializedNameError = null;
                 }
             }
-        }
-
-        return expr;
-    }
-
-    // https://tc39.github.io/ecma262/#sec-comma-operator
-
-    parseExpression(): Node.Expression | Node.SequenceExpression {
-        const startToken = this.lookahead;
-        let expr = this.isolateCoverGrammar(this.parseAssignmentExpression);
-
-        if (this.match(',')) {
-            const expressions: Node.Expression[] = [];
-            expressions.push(expr);
-            while (this.lookahead.type !== Token.EOF) {
-                if (!this.match(',')) {
-                    break;
-                }
-                this.nextToken();
-                expressions.push(this.isolateCoverGrammar(this.parseAssignmentExpression));
-            }
-
-            expr = this.finalize(this.startNode(startToken), new Node.SequenceExpression(expressions));
         }
 
         return expr;
@@ -1995,7 +1976,7 @@ export class Parser {
     // https://tc39.github.io/ecma262/#sec-if-statement
 
     parseIfClause() {
-        return this._parseExpression(0);
+        return this.parseExpression(0);
     }
 
     parseIfStatement(): Node.IfStatement {
@@ -2010,7 +1991,7 @@ export class Parser {
         //this.expect('(');
         const test = this.parseExpression();
 		
-		if (this._nextToken().value == "then") {
+		if (this.nextToken().value == "then") {
 			this.consumeToken();
 		}
 		
@@ -2085,153 +2066,19 @@ export class Parser {
     // https://tc39.github.io/ecma262/#sec-for-statement
     // https://tc39.github.io/ecma262/#sec-for-in-and-for-of-statements
 
-    parseForStatement(): Node.ForStatement | Node.ForInStatement | Node.ForOfStatement {
-        let init: any = null;
-        let test: Node.Expression | null = null;
-        let update: Node.Expression | null = null;
-        let forIn = true;
-        let left, right;
-
-        const node = this.createNode();
-        this.expectKeyword('for');
-        this.expect('(');
-
-        if (this.match(';')) {
-            this.nextToken();
-        } else {
-            if (this.matchKeyword('var')) {
-                init = this.createNode();
-                this.nextToken();
-
-                const previousAllowIn = this.context.allowIn;
-                this.context.allowIn = false;
-                const declarations = this.parseVariableDeclarationList({ inFor: true });
-                this.context.allowIn = previousAllowIn;
-
-                if (declarations.length === 1 && this.matchKeyword('in')) {
-                    const decl = declarations[0];
-                    if (decl.init && (decl.id.type === Syntax.ArrayPattern || decl.id.type === Syntax.ObjectPattern)) {
-                        this.tolerateError(Messages.ForInOfLoopInitializer, 'for-in');
-                    }
-                    init = this.finalize(init, new Node.VariableDeclaration(declarations, 'var'));
-                    this.nextToken();
-                    left = init;
-                    right = this.parseExpression();
-                    init = null;
-                } else if (declarations.length === 1 && declarations[0].init === null && this.matchContextualKeyword('of')) {
-                    init = this.finalize(init, new Node.VariableDeclaration(declarations, 'var'));
-                    this.nextToken();
-                    left = init;
-                    right = this.parseAssignmentExpression();
-                    init = null;
-                    forIn = false;
-                } else {
-                    init = this.finalize(init, new Node.VariableDeclaration(declarations, 'var'));
-                    this.expect(';');
-                }
-            } else if (this.matchKeyword('const') || this.matchKeyword('let')) {
-                init = this.createNode();
-                const kind = this.nextToken().value as string;
-
-                if (this.lookahead.value === 'in') {
-                    init = this.finalize(init, new Node.Identifier(kind));
-                    this.nextToken();
-                    left = init;
-                    right = this.parseExpression();
-                    init = null;
-                } else {
-                    const previousAllowIn = this.context.allowIn;
-                    this.context.allowIn = false;
-                    const declarations = this.parseBindingList(kind, { inFor: true });
-                    this.context.allowIn = previousAllowIn;
-
-                    if (declarations.length === 1 && declarations[0].init === null && this.matchKeyword('in')) {
-                        init = this.finalize(init, new Node.VariableDeclaration(declarations, kind));
-                        this.nextToken();
-                        left = init;
-                        right = this.parseExpression();
-                        init = null;
-                    } else if (declarations.length === 1 && declarations[0].init === null && this.matchContextualKeyword('of')) {
-                        init = this.finalize(init, new Node.VariableDeclaration(declarations, kind));
-                        this.nextToken();
-                        left = init;
-                        right = this.parseAssignmentExpression();
-                        init = null;
-                        forIn = false;
-                    } else {
-                        this.consumeSemicolon();
-                        init = this.finalize(init, new Node.VariableDeclaration(declarations, kind));
-                    }
-                }
-            } else {
-                const initStartToken = this.lookahead;
-                const previousAllowIn = this.context.allowIn;
-                this.context.allowIn = false;
-                init = this.inheritCoverGrammar(this.parseAssignmentExpression);
-                this.context.allowIn = previousAllowIn;
-
-                if (this.matchKeyword('in')) {
-                    if (!this.context.isAssignmentTarget || init.type === Syntax.AssignmentExpression) {
-                        this.tolerateError(Messages.InvalidLHSInForIn);
-                    }
-
-                    this.nextToken();
-                    this.reinterpretExpressionAsPattern(init);
-                    left = init;
-                    right = this.parseExpression();
-                    init = null;
-                } else if (this.matchContextualKeyword('of')) {
-                    if (!this.context.isAssignmentTarget || init.type === Syntax.AssignmentExpression) {
-                        this.tolerateError(Messages.InvalidLHSInForLoop);
-                    }
-
-                    this.nextToken();
-                    this.reinterpretExpressionAsPattern(init);
-                    left = init;
-                    right = this.parseAssignmentExpression();
-                    init = null;
-                    forIn = false;
-                } else {
-                    if (this.match(',')) {
-                        const initSeq = [init];
-                        while (this.match(',')) {
-                            this.nextToken();
-                            initSeq.push(this.isolateCoverGrammar(this.parseAssignmentExpression));
-                        }
-                        init = this.finalize(this.startNode(initStartToken), new Node.SequenceExpression(initSeq));
-                    }
-                    this.expect(';');
-                }
-            }
-        }
-
-        if (typeof left === 'undefined') {
-            if (!this.match(';')) {
-                test = this.parseExpression();
-            }
-            this.expect(';');
-            if (!this.match(')')) {
-                update = this.parseExpression();
-            }
-        }
-
-        let body;
-        if (!this.match(')') && this.config.tolerant) {
-            this.tolerateUnexpectedToken(this.nextToken());
-            body = this.finalize(this.createNode(), new Node.EmptyStatement());
-        } else {
-            this.expect(')');
-
-            const previousInIteration = this.context.inIteration;
-            this.context.inIteration = true;
-            body = this.isolateCoverGrammar(this.parseStatement);
-            this.context.inIteration = previousInIteration;
-        }
-
-        return (typeof left === 'undefined') ?
-            this.finalize(node, new Node.ForStatement(init, test, update, body)) :
-            forIn ? this.finalize(node, new Node.ForInStatement(left, right, body)) :
-                this.finalize(node, new Node.ForOfStatement(left, right, body));
+    parseForStatement(): Node.ForStatement {
+	   	// We want to exclude semicolon chaining
+    	let
+    		head = this.parseExpression(BINARYOPS[';']),
+	    	body = this.parseExpression(0),
+	    	alt = null;
+	    
+	    if (this.matchKeyword('else')) {
+	    	this.consumeToken();
+	    	alt = this.parseExpression(0);
+	    }
+	    
+        return new Node.ForStatement(head, body, alt);
     }
 
     // https://tc39.github.io/ecma262/#sec-continue-statement
@@ -3050,7 +2897,7 @@ export class Parser {
         return this.finalize(node, new Node.ClassExpression(id, superClass, classBody));
     }
 
-    _nextToken() {
+    nextToken(): RawToken {
         if (this.lookahead) {
             return this.lookahead;
         }
@@ -3058,14 +2905,17 @@ export class Parser {
         return this.consumeToken();
     }
 
-    consumeToken() {
+    consumeToken(): RawToken {
         return this.lookahead = this.scanner.lex();
     }
 
     parseAtom() {
-        let tok = this._nextToken(), val, op;
-
+		let start = this.scanner.index;
+        let tok = this.nextToken(), val, op;
+		
         this.consumeToken();
+        
+        console.log(tok);
 
         switch (tok.type) {
             case Token.BooleanLiteral:
@@ -3081,14 +2931,30 @@ export class Parser {
 				if (tok.value == 'if') {
 					return this.parseIfStatement();
 				}
+				else if (tok.value == 'for') {
+					let obj = this.parseForStatement();
+					return obj;
+				}
             case Token.Punctuator:
                 // Ignore [ and { for now
                 if (tok.value == '(') {
-                    val = this._parseExpression(0);
-
-                    this.expect(")");
-
-                    return val;
+                	if (this.matchPunctuator(")")) {
+                		let stop = this.scanner.index;
+                		
+                		this.consumeToken();
+                		return new Node.Literal(
+                			null, this.scanner.source.substring(
+                				start, stop
+                			)
+                		);
+                	}
+                	else {
+		                val = this.parseExpression(0);
+						console.log("A");
+		                this.expectPunctuator(")");
+console.log("B");
+		                return val;
+		            }
                 }
             //... Fallthrough
 
@@ -3096,7 +2962,7 @@ export class Parser {
                 op = UNARYOPS[tok.value];
                 if (typeof op === 'number') {
                     return new Node.UnaryExpression(
-                        tok.value as string, this._parseExpression(op)
+                        tok.value as string, this.parseExpression(op)
                     );
                 }
                 else if (tok.type === Token.Identifier) {
@@ -3110,7 +2976,7 @@ export class Parser {
     }
 
     nextBinaryOperator(minprec: number) {
-        let tok = this._nextToken();
+        let tok = this.nextToken();
 
         let op = BINARYOPS[tok.value];
 
@@ -3119,18 +2985,21 @@ export class Parser {
         }
 
         this.consumeToken();
-        return tok;
+        return {
+        	token: tok, prec: op,
+        	leftassoc: (RIGHTOPS.indexOf(tok.value as string) == -1)? 1 : 0
+        };
     }
 
-    _parseExpression(minprec: number) {
+    parseExpression(minprec?: number) {
         let lhs = this.parseAtom(), op;
 
-        while (op = this.nextBinaryOperator(minprec)) {
-            let next_min_prec = op.prec + 1; //(op.assoc == -1);
+        while (op = this.nextBinaryOperator(minprec as number)) {
+            let next_min_prec = op.prec + op.leftassoc;
 
-            let rhs = this._parseExpression(next_min_prec);
+            let rhs = this.parseExpression(next_min_prec);
 
-            lhs = new Node.BinaryExpression(op.value, lhs, rhs);
+            lhs = new Node.BinaryExpression(op.token.value, lhs, rhs);
         }
 
         return lhs;
@@ -3150,7 +3019,9 @@ export class Parser {
     }
 
     parseScript(): Node.Script {
-        return this._parseExpression(0);
+    	// Consume the default EOF token
+    	this.consumeToken();
+        return this.parseExpression(0);
     	/*
         const node = this.createNode();
         const body: Node.StatementListItem[] = [];

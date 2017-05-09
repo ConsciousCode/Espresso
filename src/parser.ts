@@ -281,6 +281,7 @@ export class Parser {
         if (!this.config.comment) {
             this.scanner.scanComments();
         } else {
+        	/*
             const comments: Comment[] = this.scanner.scanComments();
             if (comments.length > 0 && this.delegate) {
                 for (let i = 0; i < comments.length; ++i) {
@@ -311,6 +312,7 @@ export class Parser {
                     this.delegate(node, metadata);
                 }
             }
+            */
         }
     }
 
@@ -1992,8 +1994,8 @@ export class Parser {
 
     // https://tc39.github.io/ecma262/#sec-if-statement
 
-    parseIfClause(): Node.Statement {
-        return this.parseStatement();
+    parseIfClause() {
+        return this._parseExpression(0);
     }
 
     parseIfStatement(): Node.IfStatement {
@@ -2001,20 +2003,28 @@ export class Parser {
         let consequent: Node.Statement;
         let alternate: Node.Statement | null = null;
 
-        this.expectKeyword('if');
-        this.expect('(');
+		// The calling function is responsible for the if token
+        //this.expectKeyword('if');
+        
+        // Espresso doesn't require parentheses
+        //this.expect('(');
         const test = this.parseExpression();
-
+		
+		if (this._nextToken().value == "then") {
+			this.consumeToken();
+		}
+		
+		/*
         if (!this.match(')') && this.config.tolerant) {
             this.tolerateUnexpectedToken(this.nextToken());
             consequent = this.finalize(this.createNode(), new Node.EmptyStatement());
         } else {
-            this.expect(')');
-            consequent = this.parseIfClause();
-            if (this.matchKeyword('else')) {
-                this.nextToken();
-                alternate = this.parseIfClause();
-            }
+        */
+        //this.expect(')');
+        consequent = this.parseIfClause();
+        if (this.matchKeyword('else')) {
+            this.nextToken();
+            alternate = this.parseIfClause();
         }
 
         return this.finalize(node, new Node.IfStatement(test, consequent, alternate));
@@ -3066,9 +3076,12 @@ export class Parser {
                 return new Node.Literal(tok.value as number, tok.value as string);
             case Token.StringLiteral:
                 return new Node.Literal(tok.value, tok.value as string);
-
+			
+			case Token.Keyword:
+				if (tok.value == 'if') {
+					return this.parseIfStatement();
+				}
             case Token.Punctuator:
-            case Token.Keyword:
                 // Ignore [ and { for now
                 if (tok.value == '(') {
                     val = this._parseExpression(0);

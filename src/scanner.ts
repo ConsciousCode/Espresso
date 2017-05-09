@@ -114,81 +114,22 @@ export class Scanner {
 
     // https://tc39.github.io/ecma262/#sec-comments
 
-    private skipSingleLineComment(offset: number): Comment[] {
-        let comments: Comment[] = [];
-        let start, loc;
-
-        if (this.trackComment) {
-            comments = [];
-            start = this.index - offset;
-            loc = {
-                start: {
-                    line: this.lineNumber,
-                    column: this.index - this.lineStart - offset
-                },
-                end: {}
-            };
-        }
-
+    private skipSingleLineComment() {
         while (!this.eof()) {
             const ch = this.source.charCodeAt(this.index);
             ++this.index;
             if (Character.isLineTerminator(ch)) {
-                if (this.trackComment) {
-                    loc.end = {
-                        line: this.lineNumber,
-                        column: this.index - this.lineStart - 1
-                    };
-                    const entry: Comment = {
-                        multiLine: false,
-                        slice: [start + offset, this.index - 1],
-                        range: [start, this.index - 1],
-                        loc: loc
-                    };
-                    comments.push(entry);
-                }
                 if (ch === 13 && this.source.charCodeAt(this.index) === 10) {
                     ++this.index;
                 }
                 ++this.lineNumber;
                 this.lineStart = this.index;
-                return comments;
+                return;
             }
         }
-
-        if (this.trackComment) {
-            loc.end = {
-                line: this.lineNumber,
-                column: this.index - this.lineStart
-            };
-            const entry: Comment = {
-                multiLine: false,
-                slice: [start + offset, this.index],
-                range: [start, this.index],
-                loc: loc
-            };
-            comments.push(entry);
-        }
-
-        return comments;
     }
 
-    private skipMultiLineComment(hier: number[]): Comment[] {
-        let comments: Comment[] = [];
-        let start, loc;
-
-        if (this.trackComment) {
-            comments = [];
-            start = this.index - 2;
-            loc = {
-                start: {
-                    line: this.lineNumber,
-                    column: this.index - this.lineStart - 2
-                },
-                end: {}
-            };
-        }
-
+    private skipMultiLineComment(hier: number[]) {
         while (!this.eof()) {
             let ch = this.source.charCodeAt(this.index);
             if (Character.isLineTerminator(ch)) {
@@ -203,20 +144,7 @@ export class Scanner {
                 // 0x23 is #
                 if (this.source.charCodeAt(this.index + 1) === 0x23) {
                     this.index += 2;
-                    if (this.trackComment) {
-                        loc.end = {
-                            line: this.lineNumber,
-                            column: this.index - this.lineStart
-                        };
-                        const entry: Comment = {
-                            multiLine: true,
-                            slice: [start + 2, this.index - 2],
-                            range: [start, this.index],
-                            loc: loc
-                        };
-                        comments.push(entry);
-                    }
-                    return comments;
+                    return;
                 }
                 ++this.index;
             } else {
@@ -224,27 +152,13 @@ export class Scanner {
             }
         }
 
-        // Ran off the end of the file - the whole thing is a comment
-        if (this.trackComment) {
-            loc.end = {
-                line: this.lineNumber,
-                column: this.index - this.lineStart
-            };
-            const entry: Comment = {
-                multiLine: true,
-                slice: [start + 2, this.index],
-                range: [start, this.index],
-                loc: loc
-            };
-            comments.push(entry);
-        }
-
+		// ?
         this.tolerateUnexpectedToken();
-        return comments;
+        return;
     }
 
     public skipComment(hier, ch) {
-        let comment;
+    	let comment;
         switch (ch) {
             case 0x28: // (
                 this.index += 2;
@@ -263,20 +177,14 @@ export class Scanner {
                 break;
             default:
                 this.index += 1;
-                return this.skipSingleLineComment(1);
+                return this.skipSingleLineComment();
         }
 
         hier.pop();
-
-        return comment;
     }
 
     public scanComments() {
-        let comments;
-        if (this.trackComment) {
-            comments = [];
-        }
-
+    	let present = false;
         while (!this.eof()) {
             let ch = this.source.charCodeAt(this.index);
 
@@ -292,46 +200,30 @@ export class Scanner {
             } else if (ch === 0x23) { // U+0023 is '#'
                 ch = this.source.charCodeAt(this.index + 1);
                 const comment = this.skipComment([], ch);
-
-                if (this.trackComment) {
-                    comments = comments.concat(comment);
-                }
             } else {
                 break;
             }
+            
+            present = true;
         }
 
-        return comments;
+        return present;
     }
 
     // https://tc39.github.io/ecma262/#sec-keywords
 
     private isKeyword(id: string): boolean {
-        switch (id.length) {
-            case 2:
-                return (id === 'if') || (id === 'in') || (id === 'do');
-            case 3:
-                return (id === 'var') || (id === 'for') || (id === 'new') ||
-                    (id === 'try') || (id === 'let');
-            case 4:
-                return (id === 'this') || (id === 'else') || (id === 'case') ||
-                    (id === 'with') || (id === 'enum');
-            case 5:
-                return (id === 'while') || (id === 'break') || (id === 'catch') ||
-                    (id === 'throw') || (id === 'const') || (id === 'yield') ||
-                    (id === 'class') || (id === 'super');
-            case 6:
-                return (id === 'return') || (id === 'delete') ||
-                    (id === 'switch') || (id === 'export') || (id === 'import');
-            case 7:
-                return (id === 'default') || (id === 'finally') || (id === 'extends');
-            case 8:
-                return (id === 'function') || (id === 'continue');
-            case 10:
-                return (id === 'instanceof');
-            default:
-                return false;
-        }
+    	return [
+    		'if', 'in', 'do',
+    		'var', 'for', 'new', 'try', 'let',
+    		'this', 'else', 'case', 'with', 'enum',
+    		'while', 'break', 'catch', 'throw', 'const', 'yield',
+    		'class', 'super',
+    		'return', 'delete', 'switch', 'export', 'import',
+    		'default', 'finally', 'extends',
+    		'function', 'continue',
+    		'instanceof'
+    	].indexOf(id) != -1;
     }
 
     private codePointAt(i: number): number {
@@ -580,29 +472,6 @@ export class Scanner {
         };
     }
 
-    /**
-     * Scan spaces in literal tokens and return true if something
-     *  was skipped.
-    **/
-    private scanLiteralSpace(ch: number) {
-        if (!Character.isWhiteSpace(ch)) {
-            return false;
-        }
-
-        do {
-            if (Character.isLineTerminator(ch)) {
-                this.scanLineTerminator(ch);
-            }
-            else {
-                ++this.index;
-            }
-
-            ch = this.source.charCodeAt(this.index);
-        } while (Character.isWhiteSpace(ch));
-
-        return true;
-    }
-
     // https://tc39.github.io/ecma262/#sec-literals-numeric-literals
 
     private scanHexLiteral(start: number): RawToken {
@@ -611,7 +480,7 @@ export class Scanner {
         while (!this.eof()) {
             let ch = this.source.charCodeAt(this.index);
 
-            if (this.scanLiteralSpace(ch)) {
+            if (this.scanComments()) {
                 continue;
             }
             else if (!Character.isHexDigit(this.source.charCodeAt(this.index))) {
@@ -646,7 +515,7 @@ export class Scanner {
         while (!this.eof()) {
             ch = this.source.charCodeAt(this.index);
 
-            if (this.scanLiteralSpace(ch)) {
+            if (this.scanComments()) {
                 continue;
             }
             // 0x30 == '0', 0x31 == '1'
@@ -693,7 +562,7 @@ export class Scanner {
 
         while (!this.eof()) {
             let ch = this.source.charCodeAt(this.index);
-            if (this.scanLiteralSpace(ch)) {
+            if (this.scanComments()) {
                 continue;
             }
             else if (!Character.isOctalDigit(ch)) {
@@ -729,7 +598,7 @@ export class Scanner {
         assert(Character.isDecimalDigit(ch.charCodeAt(0)) || (ch === '.'),
             'Numeric literal must start with a decimal digit or a decimal point');
 
-        let num = '';
+        let num = '', space = false;
         if (ch !== '.') {
             num = this.source[this.index++];
 
@@ -737,9 +606,7 @@ export class Scanner {
             // Octal number in ES6 starts with '0o'.
             // Binary number in ES6 starts with '0b'.
             if (num === '0') {
-                this.scanLiteralSpace(
-                    this.source.charCodeAt(this.index)
-                );
+                space = this.scanComments();
                 ch = this.source[this.index];
                 if (ch === 'x' || ch === 'X') {
                     ++this.index;
@@ -755,8 +622,8 @@ export class Scanner {
             }
 
             while (!this.eof()) {
-                let cc = this.source.charCodeAt(this.index);
-                if (this.scanLiteralSpace(cc)) {
+                if (this.scanComments()) {
+                	space = true;
                     continue;
                 }
                 else if (!Character.isDecimalDigit(this.source.charCodeAt(this.index))) {
@@ -764,8 +631,11 @@ export class Scanner {
                 }
 
                 num += this.source[this.index++];
+                space = false;
             }
             ch = this.source[this.index];
+            
+            console.log("Num", num, 'ch', JSON.stringify(ch), space)
         }
 
         if (ch === '.') {
@@ -775,24 +645,8 @@ export class Scanner {
             }
             ch = this.source[this.index];
         }
-
-        if (ch === 'e' || ch === 'E') {
-            num += this.source[this.index++];
-
-            ch = this.source[this.index];
-            if (ch === '+' || ch === '-') {
-                num += this.source[this.index++];
-            }
-            if (Character.isDecimalDigit(this.source.charCodeAt(this.index))) {
-                while (Character.isDecimalDigit(this.source.charCodeAt(this.index))) {
-                    num += this.source[this.index++];
-                }
-            } else {
-                this.throwUnexpectedToken();
-            }
-        }
-
-        if (Character.isIdentifierStart(this.source.charCodeAt(this.index))) {
+        
+        if (!space && Character.isIdentifierStart(this.source.charCodeAt(this.index))) {
             this.throwUnexpectedToken();
         }
 
@@ -821,14 +675,12 @@ export class Scanner {
         while (!this.eof()) {
             let ch = this.source[this.index++];
 
+			// End quote
             if (ch === quote) {
-                this.scanLiteralSpace(
-                    this.source.charCodeAt(this.index)
-                );
+                this.scanComments();
                 ch = this.source[this.index + 1];
 
                 // Concatenate adjacent string literals
-                // TODO: Enable comments between them
                 if (ch === "'" || ch === '"' || ch === '`') {
                     ++this.index;
                     quote = ch;
@@ -1027,6 +879,8 @@ export class Scanner {
         }
         
         this.scanComments();
+        
+        console.log("Next char", JSON.stringify(this.source[this.index]));
 
         const cp = this.source.charCodeAt(this.index);
 

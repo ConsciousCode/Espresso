@@ -85,25 +85,7 @@ export class Tokenizer {
 
     getNextToken() {
         if (this.buffer.length === 0) {
-
-            const comments: Comment[] = this.scanner.scanComments();
-            if (this.scanner.trackComment) {
-                for (let i = 0; i < comments.length; ++i) {
-                    const e: Comment = comments[i];
-                    const value = this.scanner.source.slice(e.slice[0], e.slice[1]);
-                    const comment: BufferEntry = {
-                        type: e.multiLine ? 'BlockComment' : 'LineComment',
-                        value: value
-                    };
-                    if (this.trackRange) {
-                        comment.range = e.range;
-                    }
-                    if (this.trackLoc) {
-                        comment.loc = e.loc;
-                    }
-                    this.buffer.push(comment);
-                }
-            }
+            this.scanner.scanComments();
 
             if (!this.scanner.eof()) {
                 let loc;

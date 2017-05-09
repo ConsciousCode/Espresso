@@ -6,9 +6,7 @@ export const enum Token {
     NullLiteral,
     NumericLiteral,
     Punctuator,
-    StringLiteral,
-    RegularExpression,
-    Template
+    StringLiteral
 }
 
 export let TokenName = {};
@@ -20,5 +18,3 @@ TokenName[Token.NullLiteral] = 'Nil';
 TokenName[Token.NumericLiteral] = 'Numeric';
 TokenName[Token.Punctuator] = 'Punctuator';
 TokenName[Token.StringLiteral] = 'String';
-TokenName[Token.RegularExpression] = 'RegularExpression';
-TokenName[Token.Template] = 'Template';

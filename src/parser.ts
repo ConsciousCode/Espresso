@@ -58,6 +58,41 @@ interface TokenEntry {
     loc?: SourceLocation;
 }
 
+const UNARYOPS = {
+    "+": 20,
+    '-': 20,
+    "!": 20,
+    "~": 20
+};
+
+const BINARYOPS = {
+    //    ')': 0,
+    ';': 0,
+    ',': 0,
+    '=': 0,
+    //    ']': 0,
+
+    '||': 1,
+    '&&': 2,
+    '|': 3,
+    '^': 4,
+    '&': 5,
+    '==': 6,
+    '!=': 6,
+    '<': 7,
+    '>': 7,
+    '<=': 7,
+    '>=': 7,
+    '<<': 8,
+    '>>': 8,
+    '>>>': 8,
+    '+': 9,
+    '-': 9,
+    '*': 11,
+    '/': 11,
+    '%': 11
+};
+
 export class Parser {
     readonly config: Config;
     readonly delegate: any;
@@ -3005,6 +3040,89 @@ export class Parser {
         return this.finalize(node, new Node.ClassExpression(id, superClass, classBody));
     }
 
+    _nextToken() {
+        if (this.lookahead) {
+            return this.lookahead;
+        }
+
+        return this.consumeToken();
+    }
+
+    consumeToken() {
+        return this.lookahead = this.scanner.lex();
+    }
+
+    parseAtom() {
+        let tok = this._nextToken(), val, op;
+
+        this.consumeToken();
+
+        switch (tok.type) {
+            case Token.BooleanLiteral:
+                return new Node.Literal(tok.value === 'true', tok.value as string);
+            case Token.NullLiteral:
+                return new Node.Literal(null, tok.value as string);
+            case Token.NumericLiteral:
+                return new Node.Literal(tok.value as number, tok.value as string);
+            case Token.StringLiteral:
+                return new Node.Literal(tok.value, tok.value as string);
+
+            case Token.Punctuator:
+            case Token.Keyword:
+                // Ignore [ and { for now
+                if (tok.value == '(') {
+                    val = this._parseExpression(0);
+
+                    this.expect(")");
+
+                    return val;
+                }
+            //... Fallthrough
+
+            case Token.Identifier:
+                op = UNARYOPS[tok.value];
+                if (typeof op === 'number') {
+                    return new Node.UnaryExpression(
+                        tok.value as string, this._parseExpression(op)
+                    );
+                }
+                else if (tok.type === Token.Identifier) {
+                    return new Node.Identifier(tok.value as string);
+                }
+            //... Fallthrough
+
+            default:
+                this.throwUnexpectedToken(tok);
+        }
+    }
+
+    nextBinaryOperator(minprec: number) {
+        let tok = this._nextToken();
+
+        let op = BINARYOPS[tok.value];
+
+        if (typeof op !== 'number' || op < minprec) {
+            return null;
+        }
+
+        this.consumeToken();
+        return tok;
+    }
+
+    _parseExpression(minprec: number) {
+        let lhs = this.parseAtom(), op;
+
+        while (op = this.nextBinaryOperator(minprec)) {
+            let next_min_prec = op.prec + 1; //(op.assoc == -1);
+
+            let rhs = this._parseExpression(next_min_prec);
+
+            lhs = new Node.BinaryExpression(op.value, lhs, rhs);
+        }
+
+        return lhs;
+    }
+
     // https://tc39.github.io/ecma262/#sec-scripts
     // https://tc39.github.io/ecma262/#sec-modules
 
@@ -3019,12 +3137,15 @@ export class Parser {
     }
 
     parseScript(): Node.Script {
+        return this._parseExpression(0);
+    	/*
         const node = this.createNode();
         const body: Node.StatementListItem[] = [];
         while (this.lookahead.type !== Token.EOF) {
             body.push(this.parseStatementListItem());
         }
         return this.finalize(node, new Node.Script(body));
+        */
     }
 
     // https://tc39.github.io/ecma262/#sec-imports

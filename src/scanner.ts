@@ -60,7 +60,6 @@ export class Scanner {
     index: number;
     lineNumber: number;
     lineStart: number;
-    private curlyStack: string[];
 
     private readonly length: number;
 
@@ -73,7 +72,6 @@ export class Scanner {
         this.index = 0;
         this.lineNumber = (code.length > 0) ? 1 : 0;
         this.lineStart = 0;
-        this.curlyStack = [];
     }
 
     public saveState(): ScannerState {
@@ -515,15 +513,6 @@ export class Scanner {
         // Check for most common single-character punctuators.
         let str = this.source[this.index];
         switch (str) {
-
-            case '(':
-            case '{':
-                if (str === '{') {
-                    this.curlyStack.push('{');
-                }
-                ++this.index;
-                break;
-
             case '.':
                 ++this.index;
                 if (this.source[this.index] === '.' && this.source[this.index + 1] === '.') {
@@ -533,18 +522,11 @@ export class Scanner {
                 }
                 break;
 
-            case '}':
-                ++this.index;
-                this.curlyStack.pop();
-                break;
-            case ')':
-            case ';':
-            case ',':
-            case '[':
-            case ']':
-            case ':':
-            case '?':
-            case '~':
+            case '(': case ")":
+            case '[': case ']':
+            case "{": case "}":
+            case ',': case "?":
+            case ';': case ":":
                 ++this.index;
                 break;
 
@@ -553,33 +535,35 @@ export class Scanner {
                 str = this.source.substr(this.index, 4);
                 if (str === '>>>=') {
                     this.index += 4;
-                } else {
-
-                    // 3-character punctuators.
-                    str = str.substr(0, 3);
-                    if (str === '>>>' ||
-                        str === '<<=' || str === '>>=' || str === '**=') {
-                        this.index += 3;
-                    } else {
-
-                        // 2-character punctuators.
-                        str = str.substr(0, 2);
-                        if (str === '&&' || str === '||' || str === '==' || str === '!=' ||
-                            str === '+=' || str === '-=' || str === '*=' || str === '/=' ||
-                            str === '++' || str === '--' || str === '<<' || str === '>>' ||
-                            str === '&=' || str === '|=' || str === '^=' || str === '%=' ||
-                            str === '<=' || str === '>=' || str === '=>' || str === '**') {
-                            this.index += 2;
-                        } else {
-
-                            // 1-character punctuators.
-                            str = this.source[this.index];
-                            if ('<>=!+-*%&|^/'.indexOf(str) >= 0) {
-                                ++this.index;
-                            }
-                        }
-                    }
+                    break;
                 }
+
+                // 3-character punctuators.
+                str = str.substr(0, 3);
+                if (str === '>>>' ||
+                    str === '<<=' || str === '>>=' || str === '**=' || str === '!!!') {
+                    this.index += 3;
+                    break;
+                }
+
+                // 2-character punctuators.
+                str = str.substr(0, 2);
+                if (str === '&&' || str === '||' || str === '==' || str === '!=' ||
+                    str === '+=' || str === '-=' || str === '*=' || str === '/=' ||
+                    str === '++' || str === '--' || str === '<<' || str === '>>' ||
+                    str === '&=' || str === '|=' || str === '^=' || str === '%=' ||
+                    str === '<=' || str === '>=' || str === '=>' || str === '**') {
+                    this.index += 2;
+                    break;
+                }
+
+                // 1-character punctuators.
+                str = this.source[this.index];
+                if ('@<>=!?+-*%&|^/'.indexOf(str) != -1) {
+                    ++this.index;
+                }
+
+                break;
         }
 
         if (this.index === start) {
@@ -841,11 +825,12 @@ export class Scanner {
                 this.scanLiteralSpace(
                     this.source.charCodeAt(this.index)
                 );
-                ch = this.source[this.index++];
+                ch = this.source[this.index + 1];
 
                 // Concatenate adjacent string literals
                 // TODO: Enable comments between them
                 if (ch === "'" || ch === '"' || ch === '`') {
+                    ++this.index;
                     quote = ch;
                     continue;
                 }
@@ -1027,7 +1012,7 @@ export class Scanner {
             start: start,
             end: this.index
         };
-    } 33
+    }
 
     public lex(): RawToken {
         if (this.eof()) {
@@ -1040,6 +1025,8 @@ export class Scanner {
                 end: this.index
             };
         }
+        
+        this.scanComments();
 
         const cp = this.source.charCodeAt(this.index);
 

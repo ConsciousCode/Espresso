@@ -16,7 +16,6 @@
 		"tokenizer.ts",
 		"nodes.ts",
 		"parser.ts",
-		"comment-handler.ts",
 		"espresso.ts"
 	]
 }

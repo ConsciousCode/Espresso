@@ -16,6 +16,7 @@ export const Syntax = {
 	ConditionalExpression: 'ConditionalExpression',
 	ContinueStatement: 'ContinueStatement',
 	DoWhileStatement: 'DoWhileStatement',
+	DoBlock: "DoBlock",
 	DebuggerStatement: 'DebuggerStatement',
 	EmptyStatement: 'EmptyStatement',
 	ExportAllDeclaration: 'ExportAllDeclaration',

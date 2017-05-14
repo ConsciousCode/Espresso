@@ -58,6 +58,12 @@ interface TokenEntry {
 	loc?: SourceLocation;
 }
 
+interface Elseable {
+	head: Node.Expression;
+	body: Node.Expression;
+	alt: Node.Expression | null;
+}
+
 /**
  * Unary operator precedences.
 **/
@@ -112,6 +118,8 @@ const BINARYOPS = {
  * Operations that are right-associating
 **/
 const RIGHTOPS = [';'];
+
+const COMPACT = BINARYOPS[';'];
 
 export class Parser {
 	readonly config: Config;
@@ -1934,13 +1942,12 @@ export class Parser {
 		return this.finalize(node, new Node.VariableDeclarator(id, init));
 	}
 
-	parseVariableDeclarationList(options): Node.VariableDeclarator[] {
-		const opt: DeclarationOptions = { inFor: options.inFor };
-
-		const list: Node.VariableDeclarator[] = [];
-		list.push(this.parseVariableDeclaration(opt));
-		while (this.match(',')) {
-			this.nextToken();
+	parseVariableDeclarationList(opt): Node.VariableDeclarator[] {
+		const list: Node.VariableDeclarator[] = [
+			this.parseVariableDeclaration(opt)
+		];
+		while (this.matchPunctuator(',')) {
+			this.consumeToken();
 			list.push(this.parseVariableDeclaration(opt));
 		}
 
@@ -1948,12 +1955,9 @@ export class Parser {
 	}
 
 	parseVariableStatement(): Node.VariableDeclaration {
-		const node = this.createNode();
-		this.expectKeyword('var');
-		const declarations = this.parseVariableDeclarationList({ inFor: false });
-		this.consumeSemicolon();
-
-		return this.finalize(node, new Node.VariableDeclaration(declarations, 'var'));
+		return new Node.VariableDeclaration([], 'var');
+		//	this.parseVariableDeclarationList(), 'var'
+		//);
 	}
 
 	// https://tc39.github.io/ecma262/#sec-empty-statement
@@ -2038,38 +2042,22 @@ export class Parser {
 		return this.finalize(node, new Node.DoWhileStatement(body, test));
 	}
 
-	// https://tc39.github.io/ecma262/#sec-while-statement
+	parseDoBlock(): Node.DoBlock {
+		let body = this.parseExpression(), loop: Node.WhileStatement | null = null;
 
-	parseWhileStatement(): Node.WhileStatement {
-		const node = this.createNode();
-		let body;
+		if (this.matchKeyword('while')) {
+			this.consumeToken();
 
-		this.expectKeyword('while');
-		this.expect('(');
-		const test = this.parseExpression();
-
-		if (!this.match(')') && this.config.tolerant) {
-			this.tolerateUnexpectedToken(this.nextToken());
-			body = this.finalize(this.createNode(), new Node.EmptyStatement());
-		} else {
-			this.expect(')');
-
-			const previousInIteration = this.context.inIteration;
-			this.context.inIteration = true;
-			body = this.parseStatement();
-			this.context.inIteration = previousInIteration;
+			loop = this.parseWhileStatement();
 		}
 
-		return this.finalize(node, new Node.WhileStatement(test, body));
+		return new Node.DoBlock(body, loop);
 	}
 
-	// https://tc39.github.io/ecma262/#sec-for-statement
-	// https://tc39.github.io/ecma262/#sec-for-in-and-for-of-statements
-
-	parseForStatement(): Node.ForStatement {
+	parseElseable(): Elseable {
 		// We want to exclude semicolon chaining
 		let
-			head = this.parseExpression(BINARYOPS[';']),
+			head = this.parseExpression(COMPACT),
 			body = this.parseExpression(0),
 			alt = null;
 
@@ -2078,6 +2066,16 @@ export class Parser {
 			alt = this.parseExpression(0);
 		}
 
+		return { head, body, alt };
+	}
+
+	parseWhileStatement(): Node.WhileStatement {
+		let { head, body, alt } = this.parseElseable();
+		return new Node.WhileStatement(head, body, alt);
+	}
+
+	parseForStatement(): Node.ForStatement {
+		let { head, body, alt } = this.parseElseable();
 		return new Node.ForStatement(head, body, alt);
 	}
 
@@ -2134,40 +2132,17 @@ export class Parser {
 	// https://tc39.github.io/ecma262/#sec-return-statement
 
 	parseReturnStatement(): Node.ReturnStatement {
-		if (!this.context.inFunctionBody) {
-			this.tolerateError(Messages.IllegalReturn);
-		}
-
-		const node = this.createNode();
-		this.expectKeyword('return');
-
-		const hasArgument = !this.match(';') && !this.match('}') &&
-			!this.hasLineTerminator && this.lookahead.type !== Token.EOF;
-		const argument = hasArgument ? this.parseExpression() : null;
-		this.consumeSemicolon();
-
-		return this.finalize(node, new Node.ReturnStatement(argument));
+		//TODO
+		return new Node.ReturnStatement(this.parseExpression(0));
 	}
 
 	// https://tc39.github.io/ecma262/#sec-with-statement
 
 	parseWithStatement(): Node.WithStatement {
-		const node = this.createNode();
-		let body;
-
-		this.expectKeyword('with');
-		this.expect('(');
-		const object = this.parseExpression();
-
-		if (!this.match(')') && this.config.tolerant) {
-			this.tolerateUnexpectedToken(this.nextToken());
-			body = this.finalize(this.createNode(), new Node.EmptyStatement());
-		} else {
-			this.expect(')');
-			body = this.parseStatement();
-		}
-
-		return this.finalize(node, new Node.WithStatement(object, body));
+		return new Node.WithStatement(
+			this.parseExpression(COMPACT),
+			this.parseExpression(COMPACT)
+		);
 	}
 
 	// https://tc39.github.io/ecma262/#sec-switch-statement
@@ -2323,18 +2298,26 @@ export class Parser {
 	}
 
 	parseTryStatement(): Node.TryStatement {
-		const node = this.createNode();
-		this.expectKeyword('try');
-
-		const block = this.parseBlock();
-		const handler = this.matchKeyword('catch') ? this.parseCatchClause() : null;
-		const finalizer = this.matchKeyword('finally') ? this.parseFinallyClause() : null;
-
-		if (!handler && !finalizer) {
-			this.throwError(Messages.NoCatchOrFinally);
+		let err: Node.Identifier | null = null, body, alt;
+		if (this.matchKeyword("as")) {
+			this.consumeToken();
+			let tok = this.nextIdentifier();
+			if (tok) {
+				err = new Node.Identifier(tok.value as string);
+			}
+			else {
+				this.throwUnexpectedToken(tok);
+			}
 		}
 
-		return this.finalize(node, new Node.TryStatement(block, handler, finalizer));
+		body = this.parseExpression(COMPACT);
+
+		if (this.matchKeyword('else')) {
+			this.consumeToken();
+			alt = this.parseExpression(COMPACT);
+		}
+
+		return new Node.TryStatement(err, body, alt);
 	}
 
 	// https://tc39.github.io/ecma262/#sec-ecmascript-language-statements-and-declarations
@@ -2580,46 +2563,19 @@ export class Parser {
 	}
 
 	parseFunctionExpression(): Node.AsyncFunctionExpression | Node.FunctionExpression {
-		const node = this.createNode();
+		let name: Node.Identifier | null = null, params, body;
+		let tok = this.nextToken();
 
-		const isAsync = this.matchContextualKeyword('async');
-		if (isAsync) {
-			this.nextToken();
+		if (tok.type === Token.Identifier) {
+			name = new Node.Identifier(tok.value as string);
+			this.consumeToken();
 		}
 
-		this.expectKeyword('function');
+		params = this.parseFormalParameters();
 
-		const isGenerator = isAsync ? false : this.match('*');
-		if (isGenerator) {
-			this.nextToken();
-		}
+		body = this.parseExpression(COMPACT);
 
-		let message;
-		let id: Node.Identifier | null = null;
-
-		const previousAllowAwait = this.context.await;
-		const previousAllowYield = this.context.allowYield;
-		this.context.await = isAsync;
-		this.context.allowYield = !isGenerator;
-
-		if (!this.match('(')) {
-			const token = this.lookahead;
-			id = (!isGenerator && this.matchKeyword('yield')) ? this.parseIdentifierName() : this.parseVariableIdentifier();
-		}
-
-		const formalParameters = this.parseFormalParameters();
-		const params = formalParameters.params;
-		if (formalParameters.message) {
-			message = formalParameters.message;
-		}
-
-		const body = this.parseFunctionSourceElements();
-
-		this.context.await = previousAllowAwait;
-		this.context.allowYield = previousAllowYield;
-
-		return isAsync ? this.finalize(node, new Node.AsyncFunctionExpression(id, params, body)) :
-			this.finalize(node, new Node.FunctionExpression(id, params, body, isGenerator));
+		return new Node.FunctionExpression(name as Node.Identifier, params, body, false);
 	}
 
 	// https://tc39.github.io/ecma262/#sec-method-definitions
@@ -2904,6 +2860,15 @@ export class Parser {
 
 		return this.consumeToken();
 	}
+	
+	nextIdentifier(): RawToken | null {
+		const tok = this.nextToken();
+		if (tok.type === Token.Identifier) {
+			return tok;
+		}
+		
+		return null;
+	}
 
 	consumeToken(): RawToken {
 		return this.lookahead = this.scanner.lex();
@@ -2928,12 +2893,50 @@ export class Parser {
 				return new Node.Literal(tok.value, tok.value as string);
 
 			case Token.Keyword:
-				if (tok.value == 'if') {
+				if (tok.value === 'if') {
 					return this.parseIfStatement();
 				}
-				else if (tok.value == 'for') {
-					let obj = this.parseForStatement();
-					return obj;
+				else if (tok.value === 'for') {
+					return this.parseForStatement();
+				}
+				else if (tok.value === 'while') {
+					return this.parseWhileStatement();
+				}
+				else if (tok.value === 'do') {
+					return this.parseDoBlock();
+				}
+				else if (tok.value === 'let') {
+					return this.parseFunctionExpression();
+				}
+				else if (tok.value === 'var') {
+					return this.parseVariableStatement();
+				}
+				else if (tok.value === 'return') {
+					return new Node.ReturnStatement(
+						this.parseExpression(COMPACT)
+					);
+				}
+				else if (tok.value === 'yield') {
+					let delegate = false;
+					if (this.matchKeyword('from')) {
+						delegate = true;
+						this.consumeToken();
+					}
+
+					return new Node.YieldExpression(
+						this.parseExpression(COMPACT), delegate
+					);
+				}
+				else if (tok.value === 'fail') {
+					return new Node.ThrowStatement(
+						this.parseExpression(COMPACT)
+					);
+				}
+				else if (tok.value === 'try') {
+					return this.parseTryStatement();
+				}
+				else if (tok.value === 'with') {
+					return this.parseWithStatement();
 				}
 			case Token.Punctuator:
 				// Ignore [ and { for now

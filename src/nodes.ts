@@ -314,6 +314,17 @@ export class DoWhileStatement {
 	}
 }
 
+export class DoBlock {
+	readonly type: string;
+	readonly body: Expression;
+	readonly loop: WhileStatement | null;
+	constructor(body: Statement, loop: WhileStatement | null) {
+		this.type = Syntax.DoBlock;
+		this.body = body;
+		this.loop = loop;
+	}
+}
+
 export class EmptyStatement {
 	readonly type: string;
 	constructor() {
@@ -375,8 +386,8 @@ export class ExpressionStatement {
 export class ForStatement {
 	readonly type: string;
 	readonly head: Expression;
-	body: Expression;
-	alt: Expression | null;
+	readonly body: Expression;
+	readonly alt: Expression | null;
 	constructor(head: Expression, body: Expression, alt: Expression | null) {
 		this.type = Syntax.ForStatement;
 		this.head = head;
@@ -756,17 +767,18 @@ export class ThrowStatement {
 		this.argument = argument;
 	}
 }
+export type FailStatement = ThrowStatement;
 
 export class TryStatement {
 	readonly type: string;
-	readonly block: BlockStatement;
-	readonly handler: CatchClause | null;
-	readonly finalizer: BlockStatement | null;
-	constructor(block: BlockStatement, handler: CatchClause | null, finalizer: BlockStatement | null) {
+	readonly errid: Identifier | null;
+	readonly block: Expression;
+	readonly alt: Expression | null;
+	constructor(errid: Identifier | null, block: BlockStatement, alt: Expression | null) {
 		this.type = Syntax.TryStatement;
+		this.errid = errid;
 		this.block = block;
-		this.handler = handler;
-		this.finalizer = finalizer;
+		this.alt = alt;
 	}
 }
 
@@ -821,11 +833,13 @@ export class VariableDeclarator {
 export class WhileStatement {
 	readonly type: string;
 	readonly test: Expression;
-	readonly body: Statement;
-	constructor(test: Expression, body: Statement) {
+	readonly body: Expression;
+	readonly alt: Expression | null;
+	constructor(test: Expression, body: Expression, alt: Expression | null) {
 		this.type = Syntax.WhileStatement;
 		this.test = test;
 		this.body = body;
+		this.alt = alt;
 	}
 }
 

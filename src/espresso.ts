@@ -25,70 +25,17 @@
 import { Parser } from './parser';
 import { Tokenizer } from './tokenizer';
 
-export function parse(code: string, options, delegate) {
-	const proxyDelegate = (node, metadata) => {
-		if (delegate) {
-			delegate(node, metadata);
-		}
-	};
-
-	let parserDelegate = (typeof delegate === 'function') ? proxyDelegate : null;
-
-	let isModule = false;
-	if (options && typeof options.sourceType === 'string') {
-		isModule = (options.sourceType === 'module');
-	}
-
-	let parser = new Parser(code, options, parserDelegate);
-
-	const program = isModule ? parser.parseModule() : parser.parseScript();
-	const ast = program as any;
-
-	if (parser.config.tokens) {
-		ast.tokens = parser.tokens;
-	}
-	if (parser.config.tolerant) {
-		ast.errors = parser.errorHandler.errors;
-	}
-
-	return ast;
+export function parse(code: string) {
+	return new Parser(code).parseScript();
 }
 
-export function parseModule(code: string, options, delegate) {
-	const parsingOptions = options || {};
-	parsingOptions.sourceType = 'module';
-	return parse(code, parsingOptions, delegate);
-}
+export function tokenize(code: string) {
+	const tokenizer = new Tokenizer(code, {});
 
-export function parseScript(code: string, options, delegate) {
-	const parsingOptions = options || {};
-	parsingOptions.sourceType = 'script';
-	return parse(code, parsingOptions, delegate);
-}
+	let tokens: any = [], token: any;
 
-export function tokenize(code: string, options, delegate) {
-	const tokenizer = new Tokenizer(code, options);
-
-	let tokens;
-	tokens = [];
-
-	try {
-		while (true) {
-			let token = tokenizer.getNextToken();
-			if (!token) {
-				break;
-			}
-			if (delegate) {
-				token = delegate(token);
-			}
-			tokens.push(token);
-		}
-	} catch (e) {
-		tokenizer.errorHandler.tolerate(e);
-	}
-
-	if (tokenizer.errorHandler.tolerant) {
-		tokens.errors = tokenizer.errors();
+	while (token = tokenizer.getNextToken()) {
+		tokens.push(token);
 	}
 
 	return tokens;

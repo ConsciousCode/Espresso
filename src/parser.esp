@@ -1,0 +1,80 @@
+var Node = import "./nodes";
+var Token = import "./token";
+var Scanner = import "./scanner";
+
+let hex(a, b) {
+	return 16*a + b;
+}
+
+#(
+ * Unary operator precedences.
+)#
+var UNARYOPS = {
+	"+": hex(4, 0), '-': hex(4, 0),
+	"~": hex(4, 1), "!": hex(4, 1), 'not': hex(4, 1),
+	"++": hex(4, 2), "--": hex(4, 2),
+
+	"::": hex(4, 0), "@": hex(4, 2)
+};
+
+#(
+ * Binary operation precedences.
+)#
+var BINARYOPS = {
+	#    ')': 0,
+	# Technical
+	';': hex(0, 0),
+	',': hex(0, 1),
+	'=': hex(0, 1),
+	#    ']': 0,
+
+	# Boolean
+	'||': hex(1, 0), 'or': hex(1, 0),
+	'&&': hex(1, 1), 'and': hex(1, 1),
+
+	# Comparisons
+	'in': hex(2, 0), 'is': hex(2, 0),
+	"<": hex(2, 0), "<=": hex(2, 0),
+	">": hex(2, 0), ">=": hex(2, 0),
+	"==": hex(2, 0), "!=": hex(2, 0),
+
+	# Arithmetic
+	'+': hex(3, 0), '-': hex(3, 0),
+	'*': hex(3, 1), '/': hex(3, 1), '%': hex(3, 1),
+
+	# (Unary ops)
+
+	# Bitwise
+	'|': hex(5, 0),
+	'^': hex(5, 1),
+	'&': hex(5, 2),
+	'<<': hex(5, 3),
+	'>>': hex(5, 3),
+	'>>>': hex(5, 3),
+
+	# Referencing
+	"::": hex(10, 0), '.': hex(10, 1)
+};
+
+#(
+ * Operations that are right-associating
+)#
+var RIGHTOPS = [';'];
+
+var COMPACT = BINARYOPS[';'];
+
+var Parser = {
+	new: let(code) {
+		this.scanner = new Scanner(code);
+	},
+	match: let(type, value) {
+		let tok = this.nextToken();
+		return tok.type == type and tok.value == value;
+	},
+	matchPunctuator(value) {
+		return this.match(Token.Punctuator, value);
+	},
+	matchKeyword(value) {
+		return this.match(Token.Keyword, value);
+	}
+};

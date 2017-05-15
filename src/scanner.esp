@@ -1,46 +1,52 @@
-var Token = import "./token";
+use Token = import "./token";
 
 var Messages = {
 	UnexpectedToken: "Unexpected token"
 };
 
-var Character = {
-	isLineTerminator: let(ch) {
+proto Character {
+	isLineTerminator(ch) {
 		return ch in "\r\n";
-	},
-	isWhitespace: let(ch) {
+	}
+	
+	isWhitespace(ch) {
 		return ch in " \t\r\n\f\v";
-	},
-	isIdentifierPart: let(ch) {
+	}
+	
+	isIdentifierStart(ch) {
 		return ch in "$_"
 			"abcdefghijklmnopqrstuvwxyz"
 			"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 	}
 };
 
-var Scanner = {
-	new: let(code, handler) {
+export proto Scanner {
+	new(code, handler) {
 		this.source = code;
 		this.index = 0;
 		this.length = code.length;
 		this.lineNumber = if code.length > 0 then 1 else 0;
 		this.lineStart = 0;
-	},
-	eof: let() {
+	}
+	
+	eof() {
 		return this.index >= this.code.length;
-	},
-	unexpectedToken: let(tok) {
+	}
+	
+	unexpectedToken(tok) {
 		fail Messages.UnexpectedToken;
-	},
-	scanLineTerminator: let(ch) {
+	}
+	
+	scanLineTerminator(ch) {
 		if(ch == "\r" && this.source[this.index + 1] == "\n") {
 			++this.index;
 		}
 		++this.lineNumber;
 		++this.index;
 		this.lineStart = this.index;
-	},
-	skipSingleLineComment: let() {
+	}
+	
+	skipSingleLineComment() {
 		while(!this.eof()) {
 			var ch = this.source[this.index];
 			++this.index;
@@ -53,8 +59,9 @@ var Scanner = {
 				return;
 			}
 		}
-	},
-	skipMultiLineComment: let(hier) {
+	}
+	
+	skipMultiLineComment(hier) {
 		while(!this.eof()) {
 			var ch = this.source[this.index];
 			if(Character.isLineTerminator(ch)) {
@@ -65,8 +72,8 @@ var Scanner = {
 					hier, this.source.charCodeAt(this.index + 1)
 				);
 			}
-			else if (ch == hier[hier.length - 1]) {
-				if (this.source[this.index + 1] == "#") {
+			else if(ch == hier[hier.length - 1]) {
+				if(this.source[this.index + 1] == "#") {
 					this.index += 2;
 					return;
 				}
@@ -76,20 +83,21 @@ var Scanner = {
 				++this.index;
 			}
 		}
-	},
-	skipComment: let(hier, ch) {
+	}
+	
+	skipComment(hier, ch) {
 		when(ch) {
-			is "(" then {
+			is "(" {
 				this.index += 2;
 				hier.push(0x29);
 				this.skipMultiLineComment(hier);
 			}
-			is "[" then {
+			is "[" {
 				this.index += 2;
 				hier.push(0x5d);
 				this.skipMultiLineComment(hier);
 			}
-			is "{" then {
+			is "{" {
 				this.index += 2;
 				hier.push(0x7d);
 				this.skipMultiLineComment(hier);
@@ -102,8 +110,9 @@ var Scanner = {
 		}
 		
 		hier.pop();
-	},
-	scanComments: let() {
+	}
+	
+	scanComments() {
 		var present = false;
 		
 		while(!this.eof()) {
@@ -114,7 +123,7 @@ var Scanner = {
 			}
 			else if(Character.isLineTerminator(ch)) {
 				++this.index;
-				if (ch == "\r" and this.source[this.index] == "\n") {
+				if(ch == "\r" and this.source[this.index] == "\n") {
 					++this.index;
 				}
 				++this.lineNumber;
@@ -132,8 +141,9 @@ var Scanner = {
 		}
 		
 		return present;
-	},
-	isKeyword: let(id) {
+	}
+	
+	isKeyword(id) {
 		return id in [
 			"if", "in", "do",
 			"var", "for", "new", "try", "let",
@@ -145,8 +155,9 @@ var Scanner = {
 			"function", "continue",
 			"instanceof"
 		];
-	},
-	getIdentifier: let() {
+	}
+	
+	getIdentifier() {
 		var start = this.index++;
 		while(!this.eof()) {
 			var ch = this.source[this.index];
@@ -159,8 +170,9 @@ var Scanner = {
 		}
 		
 		return this.source.slice(start, this.index);
-	},
-	scanIdentifier: let() {
+	}
+	
+	scanIdentifier() {
 		var type, start = this.index;
 		
 		var id = this.getIdentifier();
@@ -171,7 +183,7 @@ var Scanner = {
 		else if(id == "nil") {
 			type = Token.NilLiteral;
 		}
-		else if(id == "true" || id == "false") {
+		else if(id == "true" or id == "false") {
 			type = Token.BooleanLiteral;
 		}
 		else {
@@ -186,45 +198,46 @@ var Scanner = {
 			start: start,
 			end: this.index
 		};
-	},
-	scanPunctuator: let() {
+	}
+	
+	scanPunctuator() {
 		var start = this.index;
 
-		// Check for most common single-character punctuators.
+		# Check for most common single-character punctuators.
 		var str = this.source[this.index];
 		when(str) {
-			is "." then {
+			is "." {
 				++this.index;
-				if (this.source[this.index] == "." and this.source[this.index + 1] == ".") {
-					// Spread operator: ...
+				if(this.source[this.index] == "." and this.source[this.index + 1] == ".") {
+					# Spread operator: ...
 					this.index += 2;
 					str = "...";
 				}
 			}
 			
-			is in "()[]{}" then {
+			is in "()[]{}" {
 				++this.index;
 			}
 
 			else {
-				// 4-character punctuator.
+				# 4-character punctuator.
 				str = this.source.substr(this.index, 4);
-				if (str == ">>>=") {
+				if(str == ">>>=") {
 					this.index += 4;
 					break;
 				}
 
-				// 3-character punctuators.
+				# 3-character punctuators.
 				str = str.substr(0, 3);
 				if(str in [">>>", "<<=", ">>=", "**=", "!!!"]) {
 					this.index += 3;
 					break;
 				}
 
-				// 2-character punctuators.
+				# 2-character punctuators.
 				str = str.substr(0, 2);
 				if(str in [
-					"&&", "||", "==", "!=", "+=", "-=", "*=", "/=",
+					"&&", "or", "==", "!=", "+=", "-=", "*=", "/=",
 					"++", "--", "<<", ">>", "&=", "|=", "^=", "%=",
 					"<=", ">=", "=>", "**"
 				]) {
@@ -232,15 +245,15 @@ var Scanner = {
 					break;
 				}
 
-				// 1-character punctuators.
+				# 1-character punctuators.
 				str = this.source[this.index];
-				if (str in "@<>=!?+-*%&|^/") {
+				if(str in "@<>=!?+-*%&|^/") {
 					++this.index;
 				}
 			}
 		}
 
-		if (this.index == start) {
+		if(this.index == start) {
 			this.throwUnexpectedToken();
 		}
 
@@ -252,8 +265,9 @@ var Scanner = {
 			start: start,
 			end: this.index
 		};
-	},
-	scanNumericLiteral: let() {
+	}
+	
+	scanNumericLiteral() {
 		var start = this.index, ch = this.source[start];
 
 		var num = "", space = false;
@@ -297,8 +311,9 @@ var Scanner = {
 			start: start,
 			end: this.index
 		};
-	},
-	scanStringLiteral: let() {
+	}
+	
+	scanStringLiteral() {
 		var start = this.index, quote = this.source[start], str = "";
 
 		++this.index;
@@ -306,13 +321,13 @@ var Scanner = {
 		while(!this.eof()) {
 			var ch = this.source[this.index++];
 
-			// End quote
+			# End quote
 			if(ch == quote) {
 				this.scanComments();
 				ch = this.source[this.index + 1];
 
-				// Concatenate adjacent string literals
-				if(ch == "'" || ch == '"' || ch == '`') {
+				# Concatenate adjacent string literals
+				if(ch == "'" or ch == '"' or ch == '`') {
 					++this.index;
 					quote = ch;
 					continue;
@@ -326,19 +341,19 @@ var Scanner = {
 				ch = this.source[this.index++];
 				if(!ch or !Character.isLineTerminator(ch)) {
 					when(ch) {
-						in 'nJ' then {
+						in 'nJ' {
 							str += '\n';
 						}
-						in "rM" then {
+						in "rM" {
 							str += '\r';
 						}
-						in "tI" then {
+						in "tI" {
 							str += '\t';
 						}
-						in "bH" then {
+						in "bH" {
 							str += '\b';
 						}
-						in "fL" then {
+						in "fL" {
 							str += '\f';
 						}
 
@@ -377,8 +392,9 @@ var Scanner = {
 			start: start,
 			end: this.index
 		};
-	},
-	lex: let() {
+	}
+	
+	lex() {
 		if(this.eof()) {
 			return {
 				type: Token.EOF,
@@ -398,18 +414,18 @@ var Scanner = {
 			return this.scanIdentifier();
 		}
 
-		// Very common: ( and ) and ;
-		if (cp == "(" || cp == ")" || cp == ';') {
+		# Very common: ( and ) and ;
+		if(cp == "(" or cp == ")" or cp == ';') {
 			return this.scanPunctuator();
 		}
 
-		// String literal starts with single quote (U+0027) or double quote (U+0022) or a backtick (U+0060)
-		if (cp == "'" || cp == '"' || cp == '`') {
+		# String literal starts with single quote (U+0027) or double quote (U+0022) or a backtick (U+0060)
+		if(cp == "'" or cp == '"' or cp == '`') {
 			return this.scanStringLiteral();
 		}
 
-		// Dot (.) U+002E can also start a floating-point number, hence the need
-		// to check the next character.
+		# Dot (.) U+002E can also start a floating-point number, hence the need
+		# to check the next character.
 		if(cp == '.') {
 			if(Character.isDecimalDigit(this.source[this.index + 1])) {
 				return this.scanNumericLiteral();

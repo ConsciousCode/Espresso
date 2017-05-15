@@ -1,0 +1,91 @@
+export proto UnaryExpression {
+	new(op, rhs) {
+		this.op = op;
+		this.rhs = rhs;
+	}
+}
+
+export proto BinaryExpression {
+	new(op, lhs, rhs) {
+		this.op = op;
+		this.lhs = lhs;
+		this.rhs = rhs;
+	}
+}
+
+export proto Identifier {
+	new(value) {
+		this.value = value;
+	}
+}
+
+export proto Function {
+	new(name, params, body) {
+		this.name = name;
+		this.params = params;
+		this.body = body;
+	}
+}
+
+export proto IfExpression {
+	new(cond, body, alt) {
+		this.cond = cond;
+		this.body = body;
+		this.alt = alt;
+	}
+}
+
+export proto DoExpression {
+	new(body, loop) {
+		this.body = body;
+		this.loop = loop;
+	}
+}
+
+export proto WhileStatement {
+	new(cond, body, alt) {
+		this.cond = cond;
+		this.body = body;
+		this.alt = alt;
+	}
+}
+
+export proto ForStatement {
+	new(head, body, alt) {
+		this.head = head;
+		this.body = body;
+		this.alt = alt;
+	}
+}
+
+export proto ReturnStatement {
+	new(value) {
+		this.value = value;
+	}
+}
+
+export proto WithStatement {
+	new(value, name, body) {
+		this.value = value;
+		this.name = name;
+		this.body = body;
+	}
+}
+
+export proto Literal {
+	new(value) {
+		this.value = value;
+	}
+}
+
+export proto YieldExpression {
+	new(value) {
+		this.value = value;
+	}
+}
+
+export proto FailStatement {
+	new(value) {
+		this.value = value;
+	}
+}

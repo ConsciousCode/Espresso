@@ -1,0 +1,10 @@
+export enum Token {
+	BooleanLiteral = "Boolean",
+	EOF = "<end>",
+	Identifier = "Identifier",
+	Keyword = "Keyword",
+	NilLiteral = "Nil",
+	NumericLiteral = "Numeric",
+	Punctuator = "Punctuator",
+	StringLiteral = "String"
+}

@@ -1,0 +1,17 @@
+if else
+try fail
+for while
+do with
+new del
+import export
+proto enum
+var def
+let use
+and or not
+is in
+as
+case when
+break continue redo
+return yield
+this super
+true false nil

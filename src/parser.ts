@@ -27,12 +27,12 @@ const UNARYOPS = {
  * Binary operation precedences.
 **/
 const BINARYOPS = {
-	//    ')': 0,
+	//')': 0,
 	// Technical
 	';': 0x00,
 	',': 0x01,
 	'=': 0x01,
-	//    ']': 0,
+	//']': 0,
 
 	// Boolean
 	'||': 0x10, 'or': 0x10,
@@ -67,7 +67,11 @@ const BINARYOPS = {
 **/
 const RIGHTOPS = [';'];
 
-const COMPACT = BINARYOPS[';'];
+const COMPACT = BINARYOPS[';'], PARAMETER = BINARYOPS[','];
+
+function summarize_token(tok) {
+	return TokenName[tok.type] + "{" + tok.value + "}";
+}
 
 export class Parser {
 	readonly scanner: Scanner;
@@ -87,6 +91,10 @@ export class Parser {
 			end: 0
 		};
 		this.nextToken();
+	}
+	
+	unexpectedToken(tok) {
+		return new Error("Unexpected " + summarize_token(tok));
 	}
 
 	/*
@@ -159,7 +167,10 @@ export class Parser {
 	expect(type, value?) {
 		const token = this.nextToken();
 		if (token.type !== type || token.value !== value) {
-			throw token;
+			throw new Error(
+				"Expected " + summarize_token({type, value}) +
+				", got " + summarize_token(token)
+			);
 		}
 
 		this.consumeToken();
@@ -195,13 +206,17 @@ export class Parser {
 	expectKeyword(keyword) {
 		const token = this.nextToken();
 		if (token.type !== Token.Keyword || token.value !== keyword) {
-			throw token;
+			throw this.unexpectedToken(token);
 		}
 	}
 
 	match(type, value?) {
 		let tok = this.nextToken();
 		return tok.type === type && tok.value === value;
+	}
+	
+	matchAny(value) {
+		return this.nextToken().value === value;
 	}
 
 	matchPunctuator(value) {
@@ -518,49 +533,195 @@ export class Parser {
 	}
 	*/
 
-	parseFunctionExpression(): Node.AsyncFunctionExpression | Node.FunctionExpression {
-		let name: Node.Identifier | null = null, params, body;
+	parseFunctionExpression(): Node.FunctionExpression | Node.FunctionExpression {
+		let name: Node.Identifier | null = null,
+			params: Node.FunctionParameter[] = [],
+			body;
 		let tok = this.nextToken();
 
 		if (tok.type === Token.Identifier) {
 			name = new Node.Identifier(tok.value as string);
 			this.consumeToken();
 		}
-
-		//TODO: Need special parsing for parameters
-		params = this.parseExpression(COMPACT);
+		
+		this.expectPunctuator("(");
+		
+		tok = this.nextToken();
+		while (tok.value && tok.value != ")") {
+			if (tok.type == Token.Identifier) {
+				this.consumeToken();
+				
+				let
+					name = new Node.Identifier(tok.value),
+					value: Node.Expression | null;
+				
+				if (this.matchPunctuator('=')) {
+					this.consumeToken();
+					
+					value = this.parseExpression(COMPACT);
+				}
+				
+				if (this.matchPunctuator(")")) {
+					this.consumeToken();
+				}
+			}
+			else {
+				throw this.unexpectedToken(tok);
+			}
+			
+			tok = this.nextToken();
+		}
+		
+		this.expectPunctuator(")");
 
 		body = this.parseExpression(COMPACT);
 
 		return new Node.FunctionExpression(name as Node.Identifier, params, body, false);
 	}
 
-	parseIfStatement(): Node.IfStatement {
-		let consequent: Node.Statement;
-		let alternate: Node.Statement | null = null;
+	parseIfExpression(): Node.IfExpression {
+		let consequent: Node.Expression;
+		let alternate: Node.Expression | null = null;
 
 		const test = this.parseExpression(COMPACT);
-
-		if (this.nextToken().value == "then") {
-			this.consumeToken();
-		}
+		
+		this.consumeThen();
 
 		consequent = this.parseExpression(COMPACT);
 		if (this.matchKeyword('else')) {
-			this.nextToken();
+			this.consumeToken();
 			alternate = this.parseExpression(COMPACT);
 		}
 
-		return new Node.IfStatement(test, consequent, alternate);
+		return new Node.IfExpression(test, consequent, alternate);
+	}
+	
+	parseProto(): Node.Prototype {
+		let name = "", tok = this.nextToken();
+		if (tok.type === Token.Identifier) {
+			name = tok.value as string;
+			this.consumeToken();
+		}
+		
+		return new Node.Prototype(
+			name, this.parseExpression(COMPACT)
+		);
+	}
+	
+	parseImportExpression(): Node.Import {
+		let tok = this.nextToken();
+		
+		if (tok.type === Token.StringLiteral) {
+			this.consumeToken();
+			return new Node.Import(tok.value as string, true);
+		}
+		
+		let sub: string[] = [];
+		while (tok.type === Token.Keyword || tok.type === Token.Identifier) {
+			this.consumeToken();
+			sub.push(tok.value as string);
+			
+			if (this.matchPunctuator('.')) {
+				this.consumeToken();
+			}
+			else {
+				break;
+			}
+		}
+		
+		return new Node.Import(sub.join('.'), false);
+	}
+	
+	parseExportExpression(): Node.Export {
+		let name: Node.Identifier | null = null;
+		if (this.matchKeyword("as")) {
+			this.consumeToken();
+			
+			let tok = this.nextToken();
+			if (tok.type !== Token.Identifier) {
+				throw this.unexpectedToken(tok);
+			}
+			
+			name = new Node.Identifier(tok.value as string);
+		}
+		
+		return new Node.Export(
+			name, this.parseExpression(COMPACT)
+		);
+	}
+	
+	parseCaseExpression(): Node.SwitchExpression {
+		let value = this.parseExpression(COMPACT), when: Node.SwitchCase[] = [];
+		
+		let tok = this.nextToken(), nodefault = true;
+		while (tok.type === Token.Keyword) {
+			let test: Node.Expression | null = null;
+			if (tok.value === 'when') {
+				test = this.parseExpression(COMPACT);
+				this.consumeThen();
+			}
+			else if (tok.value === 'else' && nodefault) {
+				nodefault = false;
+			}
+			else {
+				break;
+			}
+			
+			this.consumeToken();
+			
+			when.push(new Node.SwitchCase(
+				test, this.parseExpression(COMPACT)
+			));
+		}
+		
+		return new Node.SwitchExpression(value, when);
+	}
+	
+	parseVarExpression(): Node.VariableDeclaration {
+		let tok = this.nextToken(), v: Node.VariableDeclarator[] = [];
+		while (tok.type == Token.Identifier) {
+			let name = tok.value, init = null;
+			
+			tok = this.consumeToken();
+			
+			if (this.matchPunctuator(',')) {
+				tok = this.consumeToken();
+			}
+			else if (this.matchPunctuator('=')) {
+				tok = this.consumeToken();
+				
+				init = this.parseExpression(PARAMETER);
+			}
+			else {
+				v.push(new Node.VariableDeclarator(
+					new Node.Identifier(name), init
+				));
+				break;
+			}
+			
+			v.push(new Node.VariableDeclarator(
+				new Node.Identifier(name), init
+			));
+		}
+		
+		return new Node.VariableDeclaration(v, 'var');
+	}
+	
+	parseUse(): Node.Use {
+		let tok = this.nextToken();
+		
+		if (tok.type === Token.Identifier) {
+			
+		}
 	}
 
 	parseDoBlock(): Node.DoBlock {
-		let body = this.parseExpression(), loop: Node.WhileStatement | null = null;
+		let body = this.parseExpression(), loop: Node.WhileExpression | null = null;
 
 		if (this.matchKeyword('while')) {
 			this.consumeToken();
 
-			loop = this.parseWhileStatement();
+			loop = this.parseWhileExpression();
 		}
 
 		return new Node.DoBlock(body, loop);
@@ -581,23 +742,34 @@ export class Parser {
 		return { head, body, alt };
 	}
 
-	parseWhileStatement(): Node.WhileStatement {
+	parseWhileExpression(): Node.WhileExpression {
 		let { head, body, alt } = this.parseElseable();
-		return new Node.WhileStatement(head, body, alt);
+		return new Node.WhileExpression(head, body, alt);
 	}
 
-	parseForStatement(): Node.ForStatement {
+	parseForExpression(): Node.ForExpression {
 		let { head, body, alt } = this.parseElseable();
-		return new Node.ForStatement(head, body, alt);
+		return new Node.ForExpression(head, body, alt);
 	}
 
-	parseReturnStatement(): Node.ReturnStatement {
-		//TODO
-		return new Node.ReturnStatement(this.parseExpression(0));
+	parseReturnExpression(): Node.ReturnExpression {
+		return new Node.ReturnExpression(this.parseExpression(0));
 	}
 
-	parseWithStatement(): Node.WithStatement {
-		return new Node.WithStatement(
+	parseYieldExpression(): Node.ReturnExpression {
+		let delegate = false;
+		if (this.matchKeyword('from')) {
+			delegate = true;
+			this.consumeToken();
+		}
+
+		return new Node.YieldExpression(
+			this.parseExpression(COMPACT), delegate
+		);
+	}
+
+	parseWithExpression(): Node.WithExpression {
+		return new Node.WithExpression(
 			this.parseExpression(COMPACT),
 			this.parseExpression(COMPACT)
 		);
@@ -623,6 +795,14 @@ export class Parser {
 	consumeToken(): RawToken {
 		return this.lookahead = this.scanner.lex();
 	}
+	
+	consumeThen(): boolean {
+		if (this.matchAny('then')) {
+			return true;
+		}
+		
+		return false;
+	}
 
 	parseAtom() {
 		let start = this.scanner.index;
@@ -644,13 +824,19 @@ export class Parser {
 
 			case Token.Keyword:
 				if (tok.value === 'if') {
-					return this.parseIfStatement();
+					return this.parseIfExpression();
+				}
+				else if (tok.value === 'var') {
+					return this.parseVarExpression();
 				}
 				else if (tok.value === 'for') {
-					return this.parseForStatement();
+					return this.parseForExpression();
+				}
+				else if (tok.value === 'case') {
+					return this.parseCaseExpression();
 				}
 				else if (tok.value === 'while') {
-					return this.parseWhileStatement();
+					return this.parseWhileExpression();
 				}
 				else if (tok.value === 'do') {
 					return this.parseDoBlock();
@@ -658,29 +844,28 @@ export class Parser {
 				else if (tok.value === 'let') {
 					return this.parseFunctionExpression();
 				}
+				else if (tok.value === 'proto') {
+					return this.parseProto();
+				}
+				else if (tok.value === 'import') {
+					return this.parseImportExpression();
+				}
+				else if (tok.value === 'export') {
+					return this.parseExportExpression();
+				}
 				else if (tok.value === 'return') {
-					return new Node.ReturnStatement(
-						this.parseExpression(COMPACT)
-					);
+					return this.parseReturnExpression();
 				}
 				else if (tok.value === 'yield') {
-					let delegate = false;
-					if (this.matchKeyword('from')) {
-						delegate = true;
-						this.consumeToken();
-					}
-
-					return new Node.YieldExpression(
-						this.parseExpression(COMPACT), delegate
-					);
+					return this.parseYieldExpression();
 				}
 				else if (tok.value === 'fail') {
-					return new Node.ThrowStatement(
+					return new Node.FailExpression(
 						this.parseExpression(COMPACT)
 					);
 				}
 				else if (tok.value === 'with') {
-					return this.parseWithStatement();
+					return this.parseWithExpression();
 				}
 			case Token.Punctuator:
 				// Ignore [ and { for now
@@ -718,7 +903,7 @@ export class Parser {
 			//... Fallthrough
 
 			default:
-				throw tok;
+				throw this.unexpectedToken(tok);
 		}
 	}
 
@@ -755,6 +940,11 @@ export class Parser {
 	parseScript(): Node.Script {
 		// Consume the default EOF token
 		this.consumeToken();
-		return this.parseExpression(0);
+		let script = this.parseExpression(0), tok = this.nextToken();
+		if (tok.type !== Token.EOF) {
+			throw this.unexpectedToken(tok);
+		}
+		
+		return script;
 	}
 }

@@ -5,15 +5,15 @@ var Messages = {
 };
 
 proto Character {
-	isLineTerminator(ch) {
+	let isLineTerminator(ch) {
 		return ch in "\r\n";
 	}
 	
-	isWhitespace(ch) {
+	let isWhitespace(ch) {
 		return ch in " \t\r\n\f\v";
 	}
 	
-	isIdentifierStart(ch) {
+	let isIdentifierStart(ch) {
 		return ch in "$_"
 			"abcdefghijklmnopqrstuvwxyz"
 			"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -21,7 +21,7 @@ proto Character {
 };
 
 export proto Scanner {
-	new(code, handler) {
+	let new(code, handler) {
 		this.source = code;
 		this.index = 0;
 		this.length = code.length;
@@ -29,15 +29,15 @@ export proto Scanner {
 		this.lineStart = 0;
 	}
 	
-	eof() {
+	let eof() {
 		return this.index >= this.code.length;
 	}
 	
-	unexpectedToken(tok) {
+	let unexpectedToken(tok) {
 		fail Messages.UnexpectedToken;
 	}
 	
-	scanLineTerminator(ch) {
+	let scanLineTerminator(ch) {
 		if(ch == "\r" && this.source[this.index + 1] == "\n") {
 			++this.index;
 		}
@@ -46,7 +46,7 @@ export proto Scanner {
 		this.lineStart = this.index;
 	}
 	
-	skipSingleLineComment() {
+	let skipSingleLineComment() {
 		while(!this.eof()) {
 			var ch = this.source[this.index];
 			++this.index;
@@ -61,7 +61,7 @@ export proto Scanner {
 		}
 	}
 	
-	skipMultiLineComment(hier) {
+	let skipMultiLineComment(hier) {
 		while(!this.eof()) {
 			var ch = this.source[this.index];
 			if(Character.isLineTerminator(ch)) {
@@ -85,19 +85,19 @@ export proto Scanner {
 		}
 	}
 	
-	skipComment(hier, ch) {
-		when(ch) {
-			is "(" {
+	let skipComment(hier, ch) {
+		case(ch)
+			when "(" {
 				this.index += 2;
 				hier.push(0x29);
 				this.skipMultiLineComment(hier);
 			}
-			is "[" {
+			when "[" {
 				this.index += 2;
 				hier.push(0x5d);
 				this.skipMultiLineComment(hier);
 			}
-			is "{" {
+			when "{" {
 				this.index += 2;
 				hier.push(0x7d);
 				this.skipMultiLineComment(hier);
@@ -107,12 +107,11 @@ export proto Scanner {
 				this.index += 1;
 				return this.skipSingleLineComment();
 			}
-		}
 		
 		hier.pop();
 	}
 	
-	scanComments() {
+	let scanComments() {
 		var present = false;
 		
 		while(!this.eof()) {
@@ -143,7 +142,7 @@ export proto Scanner {
 		return present;
 	}
 	
-	isKeyword(id) {
+	let isKeyword(id) {
 		return id in [
 			"if", "in", "do",
 			"var", "for", "new", "try", "let",
@@ -157,7 +156,7 @@ export proto Scanner {
 		];
 	}
 	
-	getIdentifier() {
+	let getIdentifier() {
 		var start = this.index++;
 		while(!this.eof()) {
 			var ch = this.source[this.index];
@@ -172,7 +171,7 @@ export proto Scanner {
 		return this.source.slice(start, this.index);
 	}
 	
-	scanIdentifier() {
+	let scanIdentifier() {
 		var type, start = this.index;
 		
 		var id = this.getIdentifier();
@@ -200,13 +199,13 @@ export proto Scanner {
 		};
 	}
 	
-	scanPunctuator() {
+	let scanPunctuator() {
 		var start = this.index;
 
 		# Check for most common single-character punctuators.
 		var str = this.source[this.index];
-		when(str) {
-			is "." {
+		case(str) {
+			when "." {
 				++this.index;
 				if(this.source[this.index] == "." and this.source[this.index + 1] == ".") {
 					# Spread operator: ...
@@ -215,7 +214,7 @@ export proto Scanner {
 				}
 			}
 			
-			is in "()[]{}" {
+			when in "()[]{}" {
 				++this.index;
 			}
 
@@ -267,7 +266,7 @@ export proto Scanner {
 		};
 	}
 	
-	scanNumericLiteral() {
+	let scanNumericLiteral() {
 		var start = this.index, ch = this.source[start];
 
 		var num = "", space = false;
@@ -313,7 +312,7 @@ export proto Scanner {
 		};
 	}
 	
-	scanStringLiteral() {
+	let scanStringLiteral() {
 		var start = this.index, quote = this.source[start], str = "";
 
 		++this.index;
@@ -340,20 +339,20 @@ export proto Scanner {
 			else if(ch == '\\') {
 				ch = this.source[this.index++];
 				if(!ch or !Character.isLineTerminator(ch)) {
-					when(ch) {
-						in 'nJ' {
+					case(ch) {
+						when in 'nJ' {
 							str += '\n';
 						}
-						in "rM" {
+						when in "rM" {
 							str += '\r';
 						}
-						in "tI" {
+						when in "tI" {
 							str += '\t';
 						}
-						in "bH" {
+						when in "bH" {
 							str += '\b';
 						}
-						in "fL" {
+						when in "fL" {
 							str += '\f';
 						}
 
@@ -394,7 +393,7 @@ export proto Scanner {
 		};
 	}
 	
-	lex() {
+	let lex() {
 		if(this.eof()) {
 			return {
 				type: Token.EOF,
@@ -420,7 +419,7 @@ export proto Scanner {
 		}
 
 		# String literal starts with single quote (U+0027) or double quote (U+0022) or a backtick (U+0060)
-		if(cp == "'" or cp == '"' or cp == '`') {
+		if(cp in "'\"`") {
 			return this.scanStringLiteral();
 		}
 

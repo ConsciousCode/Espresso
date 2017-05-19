@@ -1,22 +1,16 @@
 var Node = import "./nodes";
-use Token = import "./token";
-use Scanner = import "./scanner";
-
-# Adding hex literals would be too much for first bootstrap, so just
-#  make a function to do it for us
-let hex(a, b) {
-	return 16*a + b;
-}
+use {Token} = import "./token";
+use {Scanner} = import "./scanner";
 
 #(
  * Unary operator precedences.
 )#
 var UNARYOPS = {
-	"+": hex(4, 0), '-': hex(4, 0),
-	"~": hex(4, 1), "!": hex(4, 1), 'not': hex(4, 1),
-	"++": hex(4, 2), "--": hex(4, 2),
+	"+": 0x40, '-': 0x40,
+	"~": 0x41, "!": 0x41, 'not': 0x41,
+	"++": 0x42, "--": 0x42,
 
-	"::": hex(4, 0), "@": hex(4, 2)
+	"::": 0x40, "@": 0x42
 };
 
 #(
@@ -25,37 +19,37 @@ var UNARYOPS = {
 var BINARYOPS = {
 	#    ')': 0,
 	# Technical
-	';': hex(0, 0),
-	',': hex(0, 1),
-	'=': hex(0, 1),
+	';': 0x00,
+	',': 0x01,
+	'=': 0x01,
 	#    ']': 0,
 
 	# Boolean
-	'||': hex(1, 0), 'or': hex(1, 0),
-	'&&': hex(1, 1), 'and': hex(1, 1),
+	'||': 0x10, 'or': 0x10,
+	'&&': 0x11, 'and': 0x11,
 
 	# Comparisons
-	'in': hex(2, 0), 'is': hex(2, 0),
-	"<": hex(2, 0), "<=": hex(2, 0),
-	">": hex(2, 0), ">=": hex(2, 0),
-	"==": hex(2, 0), "!=": hex(2, 0),
+	'in': 0x20, 'is': 0x20,
+	"<": 0x20, "<=": 0x20,
+	">": 0x20, ">=": 0x20,
+	"==": 0x20, "!=": 0x20,
 
 	# Arithmetic
-	'+': hex(3, 0), '-': hex(3, 0),
-	'*': hex(3, 1), '/': hex(3, 1), '%': hex(3, 1),
+	'+': 0x30, '-': 0x30,
+	'*': 0x31, '/': 0x31, '%': 0x31,
 
 	# (Unary ops)
 
 	# Bitwise
-	'|': hex(5, 0),
-	'^': hex(5, 1),
-	'&': hex(5, 2),
-	'<<': hex(5, 3),
-	'>>': hex(5, 3),
-	'>>>': hex(5, 3),
+	'|': 0x50,
+	'^': 0x51,
+	'&': 0x52,
+	'<<': 0x53,
+	'>>': 0x53,
+	'>>>': 0x53,
 
 	# Referencing
-	"::": hex(10, 0), '.': hex(10, 1)
+	"::": 0xa0, '.': 0xa1
 };
 
 #(
@@ -66,12 +60,12 @@ var RIGHTOPS = [';'];
 var COMPACT = BINARYOPS[';'];
 
 export proto Parser {
-	new(code) {
+	let new(code) {
 		this.scanner = new Scanner(code);
 	}
 	
-	match(type, value) {
-		let tok = this.nextToken();
+	let match(type, value) {
+		var tok = this.nextToken();
 		if(tok.type == type and tok.value == value) {
 			this.consumeToken();
 			return true;
@@ -79,15 +73,15 @@ export proto Parser {
 		return false;
 	}
 	
-	matchPunctuator(value) {
+	let matchPunctuator(value) {
 		return this.match(Token.Punctuator, value);
 	}
 	
-	matchKeyword(value) {
+	let matchKeyword(value) {
 		return this.match(Token.Keyword, value);
 	}
 	
-	parseFunction() {
+	let parseFunction() {
 		var name, body;
 		
 		var tok = this.nextToken();
@@ -117,7 +111,7 @@ export proto Parser {
 		return new Node.Function(name, params, body);
 	}
 	
-	parseIf() {
+	let parseIf() {
 		var test = this.parseExpression(COMPACT);
 		if(this.nextToken().value == "then") {
 			this.consumeToken();
@@ -132,7 +126,7 @@ export proto Parser {
 		return new Node.IfExpression(test, body, alt);
 	}
 	
-	parseDo() {
+	let parseDo() {
 		var body = this.parseExpression(), loop = nil;
 
 		if(this.matchKeyword('while')) {
@@ -144,7 +138,7 @@ export proto Parser {
 		return new Node.DoExpression(body, loop);
 	}
 	
-	parseElseable() {
+	let parseElseable() {
 		# We want to exclude semicolon chaining
 		var
 			head = this.parseExpression(COMPACT),
@@ -159,28 +153,28 @@ export proto Parser {
 		return {head:head, body:body, alt:alt};
 	}
 	
-	parseWhileStatement() {
+	let parseWhileStatement() {
 		use { head, body, alt } = this.parseElseable();
 		return new Node.WhileStatement(head, body, alt);
 	}
 	
-	parseForStatement() {
+	let parseForStatement() {
 		use { head, body, alt } = this.parseElseable();
 		return new Node.ForStatement(head, body, alt);
 	}
 	
-	parseReturnStatement() {
+	let parseReturnStatement() {
 		return new Node.ReturnStatement(this.parseExpression(0));
 	}
 	
-	parseWithStatement() {
+	let parseWithStatement() {
 		return new Node.WithStatement(
 			this.parseExpression(COMPACT),
 			this.parseExpression(COMPACT)
 		);
 	}
 	
-	nextToken() {
+	let nextToken() {
 		if(this.lookahead) {
 			return this.lookahead;
 		}
@@ -188,7 +182,7 @@ export proto Parser {
 		return this.consumeToken();
 	}
 	
-	nextIdentifier() {
+	let nextIdentifier() {
 		var tok = this.nextToken();
 		if(tok.type == Token.Identifier) {
 			return tok;
@@ -197,44 +191,44 @@ export proto Parser {
 		return nil;
 	}
 	
-	consumeToken() {
+	let consumeToken() {
 		return this.lookahead = this.scanner.lex();
 	}
 	
-	parseAtom() {
+	let parseAtom() {
 		var
 			start = this.scanner.index,
 			tok = this.nextToken(), val, op;
 
 		this.consumeToken();
 
-		when(tok.type) {
-			is Token.BooleanLiteral
+		case(tok.type) {
+			when Token.BooleanLiteral
 				return new Node.Literal(
 					tok.value == 'true', tok.value
 				);
-			is Token.NilLiteral
+			when Token.NilLiteral
 				return new Node.Literal(nil);
-			is Token.NumericLiteral
+			when Token.NumericLiteral
 				return new Node.Literal(tok.value);
-			is Token.StringLiteral
+			when Token.StringLiteral
 				return new Node.Literal(tok.value);
 
-			is Token.Keyword {
-				when(tok.value) {
-					is 'if'
+			when Token.Keyword {
+				case(tok.value) {
+					when 'if'
 						return this.parseIfStatement();
-					is 'for'
+					when 'for'
 						return this.parseForStatement();
-					is 'do'
+					when 'do'
 						return this.parseDoBlock();
-					is 'let'
+					when 'let'
 						return this.parseFunctionExpression();
-					is 'return'
+					when 'return'
 						return new Node.ReturnStatement(
 							this.parseExpression(COMPACT)
 						);
-					is 'yield' {
+					when 'yield' {
 						var delegate = false;
 						if(this.matchKeyword('from')) {
 							delegate = true;
@@ -245,15 +239,15 @@ export proto Parser {
 							this.parseExpression(COMPACT), delegate
 						);
 					}
-					is 'fail'
+					when 'fail'
 						return new Node.FailStatement(
 							this.parseExpression(COMPACT)
 						);
-					is 'with'
+					when 'with'
 						return this.parseWithStatement();
 				}
 			}
-			is Token.Punctuator {
+			when Token.Punctuator {
 				# Ignore [ and { for now
 				if(tok.value == '(') {
 					if(this.matchPunctuator(")")) {
@@ -276,7 +270,7 @@ export proto Parser {
 				continue;
 			}
 
-			is Token.Identifier {
+			when Token.Identifier {
 				op = UNARYOPS.?[tok.value];
 				if(op) {
 					return new Node.UnaryExpression(
@@ -296,7 +290,7 @@ export proto Parser {
 		}
 	}
 	
-	nextBinaryOperator(minprec) {
+	let nextBinaryOperator(minprec) {
 		var tok = this.nextToken(), op = BINARYOPS.?[tok.value];
 		
 		if(op is nil or op < minprec) {
@@ -310,7 +304,7 @@ export proto Parser {
 		};
 	}
 	
-	parseExpression(minprec) {
+	let parseExpression(minprec) {
 		var lhs = this.parseAtom(), op;
 
 		while(op = this.nextBinaryOperator(minprec)) {
@@ -322,7 +316,7 @@ export proto Parser {
 		return lhs;
 	}
 	
-	parseScript() {
+	let parseScript() {
 		# Consume the default EOF token
 		this.consumeToken();
 		return this.parseExpression(0);

@@ -1,12 +1,12 @@
 export proto UnaryExpression {
-	new(op, rhs) {
+	let new(op, rhs) {
 		this.op = op;
 		this.rhs = rhs;
 	}
 }
 
 export proto BinaryExpression {
-	new(op, lhs, rhs) {
+	let new(op, lhs, rhs) {
 		this.op = op;
 		this.lhs = lhs;
 		this.rhs = rhs;
@@ -14,13 +14,13 @@ export proto BinaryExpression {
 }
 
 export proto Identifier {
-	new(value) {
+	let new(value) {
 		this.value = value;
 	}
 }
 
 export proto Function {
-	new(name, params, body) {
+	let new(name, params, body) {
 		this.name = name;
 		this.params = params;
 		this.body = body;
@@ -28,7 +28,7 @@ export proto Function {
 }
 
 export proto IfExpression {
-	new(cond, body, alt) {
+	let new(cond, body, alt) {
 		this.cond = cond;
 		this.body = body;
 		this.alt = alt;
@@ -36,14 +36,14 @@ export proto IfExpression {
 }
 
 export proto DoExpression {
-	new(body, loop) {
+	let new(body, loop) {
 		this.body = body;
 		this.loop = loop;
 	}
 }
 
 export proto WhileStatement {
-	new(cond, body, alt) {
+	let new(cond, body, alt) {
 		this.cond = cond;
 		this.body = body;
 		this.alt = alt;
@@ -51,7 +51,7 @@ export proto WhileStatement {
 }
 
 export proto ForStatement {
-	new(head, body, alt) {
+	let new(head, body, alt) {
 		this.head = head;
 		this.body = body;
 		this.alt = alt;
@@ -59,13 +59,13 @@ export proto ForStatement {
 }
 
 export proto ReturnStatement {
-	new(value) {
+	let new(value) {
 		this.value = value;
 	}
 }
 
 export proto WithStatement {
-	new(value, name, body) {
+	let new(value, name, body) {
 		this.value = value;
 		this.name = name;
 		this.body = body;
@@ -73,19 +73,19 @@ export proto WithStatement {
 }
 
 export proto Literal {
-	new(value) {
+	let new(value) {
 		this.value = value;
 	}
 }
 
 export proto YieldExpression {
-	new(value) {
+	let new(value) {
 		this.value = value;
 	}
 }
 
 export proto FailStatement {
-	new(value) {
+	let new(value) {
 		this.value = value;
 	}
 }

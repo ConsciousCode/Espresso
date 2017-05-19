@@ -1,30 +1,10 @@
 import { Syntax } from './syntax';
 
-export type ArgumentListElement = Expression | SpreadElement;
-export type ArrayExpressionElement = Expression | SpreadElement | null;
-export type ArrayPatternElement = AssignmentPattern | BindingIdentifier | BindingPattern | RestElement | null;
-export type BindingPattern = ArrayPattern | ObjectPattern;
-export type BindingIdentifier = Identifier;
-export type Declaration = AsyncFunctionDeclaration | ClassDeclaration | ExportDeclaration | FunctionDeclaration | ImportDeclaration | VariableDeclaration;
-export type ExportableDefaultDeclaration = BindingIdentifier | BindingPattern | ClassDeclaration | Expression | FunctionDeclaration;
-export type ExportableNamedDeclaration = AsyncFunctionDeclaration | ClassDeclaration | FunctionDeclaration | VariableDeclaration;
-export type ExportDeclaration = ExportAllDeclaration | ExportDefaultDeclaration | ExportNamedDeclaration;
-export type Expression = ArrayExpression | ArrowFunctionExpression | AssignmentExpression | AsyncArrowFunctionExpression | AsyncFunctionExpression |
-	AwaitExpression | BinaryExpression | CallExpression | ClassExpression | ComputedMemberExpression |
-	ConditionalExpression | Identifier | FunctionExpression | Literal | NewExpression | ObjectExpression |
-	RegexLiteral | SequenceExpression | StaticMemberExpression | TaggedTemplateExpression |
-	ThisExpression | UnaryExpression | UpdateExpression | YieldExpression | Invalid;
-export type FunctionParameter = AssignmentPattern | BindingIdentifier | BindingPattern;
-export type ImportDeclarationSpecifier = ImportDefaultSpecifier | ImportNamespaceSpecifier | ImportSpecifier;
-export type ObjectExpressionProperty = Property | SpreadElement;
-export type ObjectPatternProperty = Property | RestElement;
-export type Statement = AsyncFunctionDeclaration | BreakStatement | ContinueStatement | DebuggerStatement | DoWhileStatement |
-	EmptyStatement | ExpressionStatement | Directive | ForStatement |
-	FunctionDeclaration | IfStatement | ReturnStatement | SwitchStatement | ThrowStatement |
-	TryStatement | VariableDeclaration | WhileStatement | WithStatement;
-export type PropertyKey = Identifier | Literal;
-export type PropertyValue = AssignmentPattern | AsyncFunctionExpression | BindingIdentifier | BindingPattern | FunctionExpression;
-export type StatementListItem = Declaration | Statement;
+export type Expression = AwaitExpression | BinaryExpression | Identifier | FunctionExpression | Literal | NewExpression |
+	ThisExpression | UnaryExpression | UpdateExpression | YieldExpression | BreakExpression | ContinueExpression |
+	EmptyExpression | ForExpression |
+	IfExpression | ReturnExpression | SwitchExpression | FailExpression |
+	TryExpression | VariableDeclaration | WhileExpression | WithExpression | Import | Export | Invalid;
 
 /* tslint:disable:max-classes-per-file */
 
@@ -33,124 +13,6 @@ export type StatementListItem = Declaration | Statement;
  *  functions that aren't being used.
 **/
 export class Invalid { }
-
-export class ArrayExpression {
-	readonly type: string;
-	readonly elements: ArrayExpressionElement[];
-	constructor(elements: ArrayExpressionElement[]) {
-		this.type = Syntax.ArrayExpression;
-		this.elements = elements;
-	}
-}
-
-export class ArrayPattern {
-	readonly type: string;
-	readonly elements: ArrayPatternElement[];
-	constructor(elements: ArrayPatternElement[]) {
-		this.type = Syntax.ArrayPattern;
-		this.elements = elements;
-	}
-}
-
-export class ArrowFunctionExpression {
-	readonly type: string;
-	readonly id: Identifier | null;
-	readonly params: FunctionParameter[];
-	readonly body: BlockStatement | Expression;
-	readonly generator: boolean;
-	readonly expression: boolean;
-	readonly async: boolean;
-	constructor(params: FunctionParameter[], body: BlockStatement | Expression, expression: boolean) {
-		this.type = Syntax.ArrowFunctionExpression;
-		this.id = null;
-		this.params = params;
-		this.body = body;
-		this.generator = false;
-		this.expression = expression;
-		this.async = false;
-	}
-}
-
-export class AssignmentExpression {
-	readonly type: string;
-	readonly operator: string;
-	readonly left: Expression;
-	readonly right: Expression;
-	constructor(operator: string, left: Expression, right: Expression) {
-		this.type = Syntax.AssignmentExpression;
-		this.operator = operator;
-		this.left = left;
-		this.right = right;
-	}
-}
-
-export class AssignmentPattern {
-	readonly type: string;
-	readonly left: BindingIdentifier | BindingPattern;
-	readonly right: Expression;
-	constructor(left: BindingIdentifier | BindingPattern, right: Expression) {
-		this.type = Syntax.AssignmentPattern;
-		this.left = left;
-		this.right = right;
-	}
-}
-
-export class AsyncArrowFunctionExpression {
-	readonly type: string;
-	readonly id: Identifier | null;
-	readonly params: FunctionParameter[];
-	readonly body: BlockStatement | Expression;
-	readonly generator: boolean;
-	readonly expression: boolean;
-	readonly async: boolean;
-	constructor(params: FunctionParameter[], body: BlockStatement | Expression, expression: boolean) {
-		this.type = Syntax.ArrowFunctionExpression;
-		this.id = null;
-		this.params = params;
-		this.body = body;
-		this.generator = false;
-		this.expression = expression;
-		this.async = true;
-	}
-}
-
-export class AsyncFunctionDeclaration {
-	readonly type: string;
-	readonly id: Identifier | null;
-	readonly params: FunctionParameter[];
-	readonly body: BlockStatement;
-	readonly generator: boolean;
-	readonly expression: boolean;
-	readonly async: boolean;
-	constructor(id: Identifier | null, params: FunctionParameter[], body: BlockStatement) {
-		this.type = Syntax.FunctionDeclaration;
-		this.id = id;
-		this.params = params;
-		this.body = body;
-		this.generator = false;
-		this.expression = false;
-		this.async = true;
-	}
-}
-
-export class AsyncFunctionExpression {
-	readonly type: string;
-	readonly id: Identifier | null;
-	readonly params: FunctionParameter[];
-	readonly body: BlockStatement;
-	readonly generator: boolean;
-	readonly expression: boolean;
-	readonly async: boolean;
-	constructor(id: Identifier | null, params: FunctionParameter[], body: BlockStatement) {
-		this.type = Syntax.FunctionExpression;
-		this.id = id;
-		this.params = params;
-		this.body = body;
-		this.generator = false;
-		this.expression = false;
-		this.async = true;
-	}
-}
 
 export class AwaitExpression {
 	readonly type: string;
@@ -175,243 +37,64 @@ export class BinaryExpression {
 	}
 }
 
-export class BlockStatement {
-	readonly type: string;
-	readonly body: Statement[];
-	constructor(body) {
-		this.type = Syntax.BlockStatement;
-		this.body = body;
-	}
-}
-
-export class BreakStatement {
+export class BreakExpression {
 	readonly type: string;
 	readonly label: Identifier | null;
 	constructor(label: Identifier | null) {
-		this.type = Syntax.BreakStatement;
+		this.type = Syntax.BreakExpression;
 		this.label = label;
 	}
 }
 
-export class CallExpression {
-	readonly type: string;
-	readonly callee: Expression | Import;
-	readonly arguments: ArgumentListElement[];
-	constructor(callee: Expression | Import, args: ArgumentListElement[]) {
-		this.type = Syntax.CallExpression;
-		this.callee = callee;
-		this.arguments = args;
-	}
-}
-
-export class CatchClause {
-	readonly type: string;
-	readonly param: BindingIdentifier | BindingPattern;
-	readonly body: BlockStatement;
-	constructor(param: BindingIdentifier | BindingPattern, body: BlockStatement) {
-		this.type = Syntax.CatchClause;
-		this.param = param;
-		this.body = body;
-	}
-}
-
-export class ClassBody {
-	readonly type: string;
-	readonly body: Property[];
-	constructor(body: Property[]) {
-		this.type = Syntax.ClassBody;
-		this.body = body;
-	}
-}
-
-export class ClassDeclaration {
-	readonly type: string;
-	readonly id: Identifier | null;
-	readonly superClass: Identifier | null;
-	readonly body: ClassBody;
-	constructor(id: Identifier | null, superClass: Identifier | null, body: ClassBody) {
-		this.type = Syntax.ClassDeclaration;
-		this.id = id;
-		this.superClass = superClass;
-		this.body = body;
-	}
-}
-
-export class ClassExpression {
-	readonly type: string;
-	readonly id: Identifier | null;
-	readonly superClass: Identifier | null;
-	readonly body: ClassBody;
-	constructor(id: Identifier | null, superClass: Identifier | null, body: ClassBody) {
-		this.type = Syntax.ClassExpression;
-		this.id = id;
-		this.superClass = superClass;
-		this.body = body;
-	}
-}
-
-export class ComputedMemberExpression {
-	readonly type: string;
-	readonly computed: boolean;
-	readonly object: Expression;
-	readonly property: Expression;
-	constructor(object: Expression, property: Expression) {
-		this.type = Syntax.MemberExpression;
-		this.computed = true;
-		this.object = object;
-		this.property = property;
-	}
-}
-
-export class ConditionalExpression {
-	readonly type: string;
-	readonly test: Expression;
-	readonly consequent: Expression;
-	readonly alternate: Expression;
-	constructor(test: Expression, consequent: Expression, alternate: Expression) {
-		this.type = Syntax.ConditionalExpression;
-		this.test = test;
-		this.consequent = consequent;
-		this.alternate = alternate;
-	}
-}
-
-export class ContinueStatement {
+export class ContinueExpression {
 	readonly type: string;
 	readonly label: Identifier | null;
 	constructor(label: Identifier | null) {
-		this.type = Syntax.ContinueStatement;
+		this.type = Syntax.ContinueExpression;
 		this.label = label;
-	}
-}
-
-export class DebuggerStatement {
-	readonly type: string;
-	constructor() {
-		this.type = Syntax.DebuggerStatement;
-	}
-}
-
-export class Directive {
-	readonly type: string;
-	readonly expression: Expression;
-	readonly directive: string;
-	constructor(expression: Expression, directive: string) {
-		this.type = Syntax.ExpressionStatement;
-		this.expression = expression;
-		this.directive = directive;
-	}
-}
-
-export class DoWhileStatement {
-	readonly type: string;
-	readonly body: Statement;
-	readonly test: Expression;
-	constructor(body: Statement, test: Expression) {
-		this.type = Syntax.DoWhileStatement;
-		this.body = body;
-		this.test = test;
 	}
 }
 
 export class DoBlock {
 	readonly type: string;
 	readonly body: Expression;
-	readonly loop: WhileStatement | null;
-	constructor(body: Statement, loop: WhileStatement | null) {
+	readonly loop: WhileExpression | null;
+	constructor(body: Expression, loop: WhileExpression | null) {
 		this.type = Syntax.DoBlock;
 		this.body = body;
 		this.loop = loop;
 	}
 }
 
-export class EmptyStatement {
+export class EmptyExpression {
 	readonly type: string;
 	constructor() {
-		this.type = Syntax.EmptyStatement;
+		this.type = Syntax.EmptyExpression;
 	}
 }
 
-export class ExportAllDeclaration {
-	readonly type: string;
-	readonly source: Literal;
-	constructor(source: Literal) {
-		this.type = Syntax.ExportAllDeclaration;
-		this.source = source;
-	}
-}
-
-export class ExportDefaultDeclaration {
-	readonly type: string;
-	readonly declaration: ExportableDefaultDeclaration;
-	constructor(declaration: ExportableDefaultDeclaration) {
-		this.type = Syntax.ExportDefaultDeclaration;
-		this.declaration = declaration;
-	}
-}
-
-export class ExportNamedDeclaration {
-	readonly type: string;
-	readonly declaration: ExportableNamedDeclaration | null;
-	readonly specifiers: ExportSpecifier[];
-	readonly source: Literal | null;
-	constructor(declaration: ExportableNamedDeclaration | null, specifiers: ExportSpecifier[], source: Literal | null) {
-		this.type = Syntax.ExportNamedDeclaration;
-		this.declaration = declaration;
-		this.specifiers = specifiers;
-		this.source = source;
-	}
-}
-
-export class ExportSpecifier {
-	readonly type: string;
-	readonly exported: Identifier;
-	readonly local: Identifier;
-	constructor(local: Identifier, exported: Identifier) {
-		this.type = Syntax.ExportSpecifier;
-		this.exported = exported;
-		this.local = local;
-	}
-}
-
-export class ExpressionStatement {
-	readonly type: string;
-	readonly expression: Expression;
-	constructor(expression: Expression) {
-		this.type = Syntax.ExpressionStatement;
-		this.expression = expression;
-	}
-}
-
-export class ForStatement {
+export class ForExpression {
 	readonly type: string;
 	readonly head: Expression;
 	readonly body: Expression;
 	readonly alt: Expression | null;
 	constructor(head: Expression, body: Expression, alt: Expression | null) {
-		this.type = Syntax.ForStatement;
+		this.type = Syntax.ForExpression;
 		this.head = head;
 		this.body = body;
 		this.alt = alt;
 	}
 }
 
-export class FunctionDeclaration {
+export class FunctionParameter {
 	readonly type: string;
-	readonly id: Identifier | null;
-	readonly params: FunctionParameter[];
-	readonly body: BlockStatement;
-	readonly generator: boolean;
-	readonly expression: boolean;
-	readonly async: boolean;
-	constructor(id: Identifier | null, params: FunctionParameter[], body: BlockStatement, generator: boolean) {
-		this.type = Syntax.FunctionDeclaration;
+	readonly id: Identifier;
+	readonly def: Expression | null;
+	
+	constructor(id: Identifier, def: Expression | null) {
+		this.type = "FunctionParameter";
 		this.id = id;
-		this.params = params;
-		this.body = body;
-		this.generator = generator;
-		this.expression = false;
-		this.async = false;
+		this.def = def;
 	}
 }
 
@@ -419,11 +102,11 @@ export class FunctionExpression {
 	readonly type: string;
 	readonly id: Identifier | null;
 	readonly params: FunctionParameter[];
-	readonly body: BlockStatement;
+	readonly body: Expression;
 	readonly generator: boolean;
 	readonly expression: boolean;
 	readonly async: boolean;
-	constructor(id: Identifier | null, params: FunctionParameter[], body: BlockStatement, generator: boolean) {
+	constructor(id: Identifier | null, params: FunctionParameter[], body: Expression, generator: boolean) {
 		this.type = Syntax.FunctionExpression;
 		this.id = id;
 		this.params = params;
@@ -443,74 +126,38 @@ export class Identifier {
 	}
 }
 
-export class IfStatement {
+export class IfExpression {
 	readonly type: string;
 	readonly test: Expression;
-	readonly consequent: Statement;
-	readonly alternate: Statement | null;
-	constructor(test: Expression, consequent: Statement, alternate: Statement | null) {
-		this.type = Syntax.IfStatement;
+	readonly consequent: Expression;
+	readonly alternate: Expression | null;
+	constructor(test: Expression, consequent: Expression, alternate: Expression | null) {
+		this.type = Syntax.IfExpression;
 		this.test = test;
 		this.consequent = consequent;
 		this.alternate = alternate;
 	}
 }
 
+export class Export {
+	readonly type: string;
+	readonly name: Identifier | null;
+	readonly value: Expression;
+	
+	constructor(name: Identifier | null, value: Expression) {
+		this.name = name;
+		this.value = value;
+	}
+}
+
 export class Import {
 	readonly type: string;
-	constructor() {
+	readonly module: string;
+	readonly local: boolean
+	constructor(module: string, local: boolean) {
 		this.type = Syntax.Import;
-	}
-}
-
-export class ImportDeclaration {
-	readonly type: string;
-	readonly specifiers: ImportDeclarationSpecifier[];
-	readonly source: Literal;
-	constructor(specifiers, source) {
-		this.type = Syntax.ImportDeclaration;
-		this.specifiers = specifiers;
-		this.source = source;
-	}
-}
-
-export class ImportDefaultSpecifier {
-	readonly type: string;
-	readonly local: Identifier;
-	constructor(local: Identifier) {
-		this.type = Syntax.ImportDefaultSpecifier;
+		this.module = module;
 		this.local = local;
-	}
-}
-
-export class ImportNamespaceSpecifier {
-	readonly type: string;
-	readonly local: Identifier;
-	constructor(local: Identifier) {
-		this.type = Syntax.ImportNamespaceSpecifier;
-		this.local = local;
-	}
-}
-
-export class ImportSpecifier {
-	readonly type: string;
-	readonly local: Identifier;
-	readonly imported: Identifier;
-	constructor(local: Identifier, imported: Identifier) {
-		this.type = Syntax.ImportSpecifier;
-		this.local = local;
-		this.imported = imported;
-	}
-}
-
-export class LabeledStatement {
-	readonly type: string;
-	readonly label: Identifier;
-	readonly body: Statement;
-	constructor(label: Identifier, body: Statement) {
-		this.type = Syntax.LabeledStatement;
-		this.label = label;
-		this.body = body;
 	}
 }
 
@@ -525,163 +172,34 @@ export class Literal {
 	}
 }
 
-export class MetaProperty {
-	readonly type: string;
-	readonly meta: Identifier;
-	readonly property: Identifier;
-	constructor(meta: Identifier, property: Identifier) {
-		this.type = Syntax.MetaProperty;
-		this.meta = meta;
-		this.property = property;
-	}
-}
-
-export class MethodDefinition {
-	readonly type: string;
-	readonly key: Expression | null;
-	readonly computed: boolean;
-	readonly value: AsyncFunctionExpression | FunctionExpression | null;
-	readonly kind: string;
-	readonly static: boolean;
-	constructor(key: Expression | null, computed: boolean, value: AsyncFunctionExpression | FunctionExpression | null, kind: string, isStatic: boolean) {
-		this.type = Syntax.MethodDefinition;
-		this.key = key;
-		this.computed = computed;
-		this.value = value;
-		this.kind = kind;
-		this.static = isStatic;
-	}
-}
-
-export class Module {
-	readonly type: string;
-	readonly body: StatementListItem[];
-	readonly sourceType: string;
-	constructor(body: StatementListItem[]) {
-		this.type = Syntax.Program;
-		this.body = body;
-		this.sourceType = 'module';
-	}
-}
-
 export class NewExpression {
 	readonly type: string;
 	readonly callee: Expression;
-	readonly arguments: ArgumentListElement[];
-	constructor(callee: Expression, args: ArgumentListElement[]) {
+	readonly arguments: Expression[];
+	constructor(callee: Expression, args: Expression[]) {
 		this.type = Syntax.NewExpression;
 		this.callee = callee;
 		this.arguments = args;
 	}
 }
 
-export class ObjectExpression {
-	readonly type: string;
-	readonly properties: ObjectExpressionProperty[];
-	constructor(properties: ObjectExpressionProperty[]) {
-		this.type = Syntax.ObjectExpression;
-		this.properties = properties;
-	}
-}
-
-export class ObjectPattern {
-	readonly type: string;
-	readonly properties: ObjectPatternProperty[];
-	constructor(properties: ObjectPatternProperty[]) {
-		this.type = Syntax.ObjectPattern;
-		this.properties = properties;
-	}
-}
-
-export class Property {
-	readonly type: string;
-	readonly key: PropertyKey;
-	readonly computed: boolean;
-	readonly value: PropertyValue | null;
-	readonly kind: string;
-	readonly method: boolean;
-	readonly shorthand: boolean;
-	constructor(kind: string, key: PropertyKey, computed: boolean, value: PropertyValue | null, method: boolean, shorthand: boolean) {
-		this.type = Syntax.Property;
-		this.key = key;
-		this.computed = computed;
-		this.value = value;
-		this.kind = kind;
-		this.method = method;
-		this.shorthand = shorthand;
-	}
-}
-
-export class RegexLiteral {
-	readonly type: string;
-	readonly value: RegExp;
-	readonly raw: string;
-	readonly regex: { pattern: string, flags: string };
-	constructor(value: RegExp, raw: string, pattern: string, flags: string) {
-		this.type = Syntax.Literal;
-		this.value = value;
-		this.raw = raw;
-		this.regex = { pattern, flags };
-	}
-}
-
-export class RestElement {
-	readonly type: string;
-	readonly argument: BindingIdentifier | BindingPattern;
-	constructor(argument: BindingIdentifier | BindingPattern) {
-		this.type = Syntax.RestElement;
-		this.argument = argument;
-	}
-}
-
-export class ReturnStatement {
+export class ReturnExpression {
 	readonly type: string;
 	readonly argument: Expression | null;
 	constructor(argument: Expression | null) {
-		this.type = Syntax.ReturnStatement;
+		this.type = Syntax.ReturnExpression;
 		this.argument = argument;
 	}
 }
 
 export class Script {
 	readonly type: string;
-	readonly body: StatementListItem[];
+	readonly body: Expression[];
 	readonly sourceType: string;
-	constructor(body: StatementListItem[]) {
+	constructor(body: Expression[]) {
 		this.type = Syntax.Program;
 		this.body = body;
 		this.sourceType = 'script';
-	}
-}
-
-export class SequenceExpression {
-	readonly type: string;
-	readonly expressions: Expression[];
-	constructor(expressions: Expression[]) {
-		this.type = Syntax.SequenceExpression;
-		this.expressions = expressions;
-	}
-}
-
-export class SpreadElement {
-	readonly type: string;
-	readonly argument: Expression;
-	constructor(argument: Expression) {
-		this.type = Syntax.SpreadElement;
-		this.argument = argument;
-	}
-}
-
-export class StaticMemberExpression {
-	readonly type: string;
-	readonly computed: boolean;
-	readonly object: Expression;
-	readonly property: Expression;
-	constructor(object: Expression, property: Expression) {
-		this.type = Syntax.MemberExpression;
-		this.computed = false;
-		this.object = object;
-		this.property = property;
 	}
 }
 
@@ -694,61 +212,23 @@ export class Super {
 
 export class SwitchCase {
 	readonly type: string;
-	readonly test: Expression;
-	readonly consequent: Statement[];
-	constructor(test: Expression, consequent: Statement[]) {
+	readonly test: Expression | null;
+	readonly consequent: Expression[];
+	constructor(test: Expression | null, consequent: Expression[]) {
 		this.type = Syntax.SwitchCase;
 		this.test = test;
 		this.consequent = consequent;
 	}
 }
 
-export class SwitchStatement {
+export class SwitchExpression {
 	readonly type: string;
 	readonly discriminant: Expression;
 	readonly cases: SwitchCase[];
 	constructor(discriminant: Expression, cases: SwitchCase[]) {
-		this.type = Syntax.SwitchStatement;
+		this.type = Syntax.SwitchExpression;
 		this.discriminant = discriminant;
 		this.cases = cases;
-	}
-}
-
-export class TaggedTemplateExpression {
-	readonly type: string;
-	readonly tag: Expression;
-	readonly quasi: TemplateLiteral;
-	constructor(tag: Expression, quasi: TemplateLiteral) {
-		this.type = Syntax.TaggedTemplateExpression;
-		this.tag = tag;
-		this.quasi = quasi;
-	}
-}
-
-interface TemplateElementValue {
-	cooked: string;
-	raw: string;
-}
-
-export class TemplateElement {
-	readonly type: string;
-	readonly value: TemplateElementValue;
-	readonly tail: boolean;
-	constructor(value: TemplateElementValue, tail: boolean) {
-		this.type = Syntax.TemplateElement;
-		this.value = value;
-		this.tail = tail;
-	}
-}
-
-export class TemplateLiteral {
-	readonly type: string;
-	readonly quasis: TemplateElement[];
-	readonly expressions: Expression[];
-	constructor(quasis: TemplateElement[], expressions: Expression[]) {
-		this.type = Syntax.TemplateLiteral;
-		this.quasis = quasis;
-		this.expressions = expressions;
 	}
 }
 
@@ -759,23 +239,22 @@ export class ThisExpression {
 	}
 }
 
-export class ThrowStatement {
+export class FailExpression {
 	readonly type: string;
 	readonly argument: Expression;
 	constructor(argument: Expression) {
-		this.type = Syntax.ThrowStatement;
+		this.type = Syntax.FailExpression;
 		this.argument = argument;
 	}
 }
-export type FailStatement = ThrowStatement;
 
-export class TryStatement {
+export class TryExpression {
 	readonly type: string;
 	readonly errid: Identifier | null;
 	readonly block: Expression;
 	readonly alt: Expression | null;
-	constructor(errid: Identifier | null, block: BlockStatement, alt: Expression | null) {
-		this.type = Syntax.TryStatement;
+	constructor(errid: Identifier | null, block: Expression, alt: Expression | null) {
+		this.type = Syntax.TryExpression;
 		this.errid = errid;
 		this.block = block;
 		this.alt = alt;
@@ -808,6 +287,18 @@ export class UpdateExpression {
 	}
 }
 
+export class Prototype {
+	readonly type: string;
+	readonly name: string;
+	readonly value: Expression;
+	
+	constructor(name: string, value: Expression) {
+		this.type = Syntax.Prototype;
+		this.name = name;
+		this.value = value;
+	}
+}
+
 export class VariableDeclaration {
 	readonly type: string;
 	readonly declarations: VariableDeclarator[];
@@ -821,34 +312,34 @@ export class VariableDeclaration {
 
 export class VariableDeclarator {
 	readonly type: string;
-	readonly id: BindingIdentifier | BindingPattern;
+	readonly id: Identifier;
 	readonly init: Expression | null;
-	constructor(id: BindingIdentifier | BindingPattern, init: Expression | null) {
+	constructor(id: Identifier, init: Expression | null) {
 		this.type = Syntax.VariableDeclarator;
 		this.id = id;
 		this.init = init;
 	}
 }
 
-export class WhileStatement {
+export class WhileExpression {
 	readonly type: string;
 	readonly test: Expression;
 	readonly body: Expression;
 	readonly alt: Expression | null;
 	constructor(test: Expression, body: Expression, alt: Expression | null) {
-		this.type = Syntax.WhileStatement;
+		this.type = Syntax.WhileExpression;
 		this.test = test;
 		this.body = body;
 		this.alt = alt;
 	}
 }
 
-export class WithStatement {
+export class WithExpression {
 	readonly type: string;
 	readonly object: Expression;
-	readonly body: Statement;
-	constructor(object: Expression, body: Statement) {
-		this.type = Syntax.WithStatement;
+	readonly body: Expression;
+	constructor(object: Expression, body: Expression) {
+		this.type = Syntax.WithExpression;
 		this.object = object;
 		this.body = body;
 	}

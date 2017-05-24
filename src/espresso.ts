@@ -41,7 +41,5 @@ export function tokenize(code: string) {
 	return tokens;
 }
 
-export { Syntax } from './syntax';
-
 // Sync with *.json manifests.
 export const version = '4.0.0-dev';

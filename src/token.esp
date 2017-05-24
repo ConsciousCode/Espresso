@@ -1,4 +1,4 @@
-export enum Token {
+return enum Token {
 	BooleanLiteral = "Boolean",
 	EOF = "<end>",
 	Identifier = "Identifier",

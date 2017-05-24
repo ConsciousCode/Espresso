@@ -1,6 +1,6 @@
 var Node = import "./nodes";
-use {Token} = import "./token";
-use {Scanner} = import "./scanner";
+var Token = import "./token";
+var Scanner = import "./scanner";
 
 #(
  * Unary operator precedences.
@@ -154,12 +154,12 @@ export proto Parser {
 	}
 	
 	let parseWhileStatement() {
-		use { head, body, alt } = this.parseElseable();
+		var { head, body, alt } = this.parseElseable();
 		return new Node.WhileStatement(head, body, alt);
 	}
 	
 	let parseForStatement() {
-		use { head, body, alt } = this.parseElseable();
+		var { head, body, alt } = this.parseElseable();
 		return new Node.ForStatement(head, body, alt);
 	}
 	

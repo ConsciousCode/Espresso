@@ -3,7 +3,6 @@ import { ErrorHandler } from './error-handler';
 import { Messages } from './messages';
 import * as Node from './nodes';
 import { Comment, RawToken, Scanner, SourceLocation } from './scanner';
-import { Syntax } from './syntax';
 import { Token, TokenName } from './token';
 
 interface Elseable {
@@ -166,14 +165,16 @@ export class Parser {
 
 	expect(type, value?) {
 		const token = this.nextToken();
-		if (token.type !== type || token.value !== value) {
+		if (token.type !== type || (value && token.value !== value)) {
 			throw new Error(
-				"Expected " + summarize_token({type, value}) +
+				"Expected " + summarize_token({type, value: value || ""}) +
 				", got " + summarize_token(token)
 			);
 		}
 
 		this.consumeToken();
+		
+		return token;
 	}
 
 	expectPunctuator(value) {
@@ -307,7 +308,7 @@ export class Parser {
 		return this.finalize(node, new Node.ArrayExpression(elements));
 	}
 
-	parseObjectPropertyKey(): Node.PropertyKey {
+	parseObjectLiteralPropertyKey(): Node.PropertyKey {
 		const node = this.createNode();
 		const token = this.nextToken();
 
@@ -342,14 +343,14 @@ export class Parser {
 		return key;
 	}
 
-	parseObjectInitializer(): Node.ObjectExpression {
+	parseObjectLiteralInitializer(): Node.ObjectExpression {
 		const node = this.createNode();
 
 		this.expect('{');
 		const properties: Node.ObjectExpressionProperty[] = [];
 		const hasProto = { value: false };
 		while (!this.match('}')) {
-			properties.push(this.match('...') ? this.parseSpreadElement() : this.parseObjectProperty(hasProto));
+			properties.push(this.match('...') ? this.parseSpreadElement() : this.parseObjectLiteralProperty(hasProto));
 			if (!this.match('}')) {
 				this.expectCommaSeparator();
 			}
@@ -482,7 +483,7 @@ export class Parser {
 		return this.finalize(node, new Node.RestElement(arg));
 	}
 
-	parseObjectPattern(params, kind?: string): Node.ObjectPattern {
+	parseObjectLiteralPattern(params, kind?: string): Node.ObjectPattern {
 		const node = this.createNode();
 		const properties: Node.ObjectPatternProperty[] = [];
 
@@ -504,7 +505,7 @@ export class Parser {
 		if (this.match('[')) {
 			pattern = this.parseArrayPattern(params, kind);
 		} else if (this.match('{')) {
-			pattern = this.parseObjectPattern(params, kind);
+			pattern = this.parseObjectLiteralPattern(params, kind);
 		} else {
 			if (this.matchKeyword('let') && (kind === 'const' || kind === 'let')) {
 				this.tolerateUnexpectedToken(this.lookahead, Messages.LetInLexicalBinding);
@@ -677,46 +678,154 @@ export class Parser {
 		return new Node.SwitchExpression(value, when);
 	}
 	
-	parseVarExpression(): Node.VariableDeclaration {
-		let tok = this.nextToken(), v: Node.VariableDeclarator[] = [];
-		while (tok.type == Token.Identifier) {
-			let name = tok.value, init = null;
-			
-			tok = this.consumeToken();
-			
-			if (this.matchPunctuator(',')) {
-				tok = this.consumeToken();
-			}
-			else if (this.matchPunctuator('=')) {
-				tok = this.consumeToken();
-				
-				init = this.parseExpression(PARAMETER);
-			}
-			else {
-				v.push(new Node.VariableDeclarator(
-					new Node.Identifier(name), init
-				));
-				break;
-			}
-			
-			v.push(new Node.VariableDeclarator(
-				new Node.Identifier(name), init
-			));
+	parseVarPattern(): Node.VariablePattern {
+		let
+			tok = this.nextToken(),
+			key: Node.Expression,
+			id: Node.Identifier | null = null,
+			def: Node.Expression | null = null;
+		
+		if (tok.type === Token.Identifier || tok.type == Token.Keyword) {
+			this.consumeToken();
+			key = new Node.Identifier(tok.value as string);
+		}
+		else {
+			key = this.parseExpression(COMPACT);
 		}
 		
-		return new Node.VariableDeclaration(v, 'var');
+		if (this.matchPunctuator(":")) {
+			this.consumeToken();
+			id = new Node.Identifier(
+				this.expect(Token.Identifier).value as string
+			);
+			
+			if (this.matchPunctuator('=')) {
+				this.consumeToken();
+				def = this.parseExpression(COMPACT);
+			}
+		}
+		
+		return new Node.VariablePattern(key, id, def);
 	}
 	
-	parseUse(): Node.Use {
+	parseVarDestruction(): Node.VariableDestruction {
 		let tok = this.nextToken();
-		
 		if (tok.type === Token.Identifier) {
+			this.consumeToken();
+			return new Node.VariableDestruction(
+				Node.VariablePatternType.SINGLE,
+				[new Node.Identifier(tok.value)]
+			)
+		}
+		else if (tok.value === '(') {
+			let ids: Node.Identifier[] = [];
+			tok = this.consumeToken();
 			
+			while (tok.type === Token.Identifier) {
+				this.consumeToken();
+				
+				ids.push(new Node.Identifier(tok.value as string));
+				
+				if (this.matchPunctuator(',')) {
+					tok = this.consumeToken();
+				}
+				else {
+					break;
+				}
+			}
+			
+			this.expectPunctuator(")");
+			
+			return new Node.VariableDestruction(
+				Node.VariablePatternType.PAREN, ids
+			);
+		}
+		else if (tok.value === '[') {
+			let
+				pat: Node.VariablePattern | null = null,
+				ids: Node.VariablePattern[] = [];
+			this.consumeToken();
+			
+			while (pat = this.parseVarPattern()) {
+				ids.push(pat);
+				
+				if (this.matchPunctuator(',')) {
+					tok = this.consumeToken();
+				}
+				else {
+					break;
+				}
+			}
+			
+			this.expectPunctuator("]");
+			
+			return new Node.VariableDestruction(
+				Node.VariablePatternType.SQUARE, ids
+			);
+		}
+		else if (tok.value === "{") {
+			let
+				pat: Node.VariablePattern,
+				ids: Node.VariablePattern[] = [];
+			this.consumeToken();
+			
+			while (pat = this.parseVarPattern()) {
+				ids.push(pat);
+				
+				if (this.matchPunctuator(',')) {
+					tok = this.consumeToken();
+				}
+				else {
+					break;
+				}
+			}
+			
+			this.expectPunctuator("}");
+			
+			return new Node.VariableDestruction(
+				Node.VariablePatternType.CURLY, ids
+			);
+		}
+		else {
+			throw this.unexpectedToken(this.nextToken());
 		}
 	}
-
+	
+	parseVarBinding(): Node.VariableBinding {
+		let
+			pat = this.parseVarDestruction(),
+			val: Node.Expression | null = null;
+		
+		if (this.matchPunctuator('=')) {
+			this.consumeToken();
+			
+			val = this.parseExpression(COMPACT);
+		}
+		return new Node.VariableBinding(pat, val);
+	}
+	
+	parseVarDeclaration(kind: string): Node.VariableDeclaration {
+		let
+			tok = this.nextToken(),
+			v: Node.VariableBinding[] = [],
+			bind: Node.VariableBinding;
+		
+		while (bind = this.parseVarBinding()) {
+			v.push(bind);
+			
+			if (this.matchPunctuator(',')) {
+				this.consumeToken();
+			}
+			else {
+				break;
+			}
+		}
+		
+		return new Node.VariableDeclaration(v, kind);
+	}
+	
 	parseDoBlock(): Node.DoBlock {
-		let body = this.parseExpression(), loop: Node.WhileExpression | null = null;
+		let body = this.parseExpression(COMPACT), loop: Node.WhileExpression | null = null;
 
 		if (this.matchKeyword('while')) {
 			this.consumeToken();
@@ -774,6 +883,85 @@ export class Parser {
 			this.parseExpression(COMPACT)
 		);
 	}
+	
+	parseObjectProperty(offset: number): Node.ObjectProperty {
+		let
+			tok = this.nextToken(),
+			key: boolean = false,
+			a: Node.Expression, b: Node.Expression;
+		
+		if (tok.type === Token.Identifier || tok.type === Token.Keyword) {
+			this.consumeToken();
+			
+			key = true;
+		}
+		else {
+			a = this.parseExpression(COMPACT);
+		}
+		
+		if (this.matchPunctuator(":")) {
+			this.consumeToken();
+			
+			if (key) {
+				a = new Node.Literal(tok.value as string);
+			}
+			
+			b = this.parseExpression(COMPACT);
+		}
+		else {
+			if (key) {
+				a = new Node.Identifier(tok.value as string);
+			}
+			
+			return new Node.ObjectProperty(
+				true, new Node.Literal(offset), a
+			);
+		}
+		
+		return new Node.ObjectProperty(false, a, b);
+	}
+	
+	parseObjectLiteral(lhs, starter): Node.ObjectLiteral {
+		let
+			object: Node.ObjectProperty[] = [],
+			offset: number = 0;
+		
+		if (starter === ":") {
+			object.push(new Node.ObjectProperty(
+				false, lhs, this.parseExpression(COMPACT)
+			));
+			
+			if (!this.matchPunctuator(',')) {
+				return new Node.ObjectLiteral(object);
+			}
+			
+			this.consumeToken();
+		}
+		else {
+			object.push(new Node.ObjectProperty(
+				true, new Node.Literal(offset++), lhs
+			));
+		}
+		
+		do {
+			let prop = this.parseObjectProperty(offset);
+			if (prop.isArraylike) {
+				++offset;
+			}
+			
+			object.push(prop);
+			
+			if (this.matchPunctuator(',')) {
+				this.consumeToken();
+				continue;
+			}
+			else {
+				break;
+			}
+		} while (true);
+		
+		return new Node.ObjectLiteral(object);
+	}
 
 	nextToken(): RawToken {
 		if (this.lookahead) {
@@ -814,20 +1002,20 @@ export class Parser {
 
 		switch (tok.type) {
 			case Token.BooleanLiteral:
-				return new Node.Literal(tok.value === 'true', tok.value as string);
+				return new Node.Literal(tok.value === 'true');
 			case Token.NullLiteral:
-				return new Node.Literal(null, tok.value as string);
+				return new Node.Literal(null);
 			case Token.NumericLiteral:
-				return new Node.Literal(tok.value as number, tok.value as string);
+				return new Node.Literal(tok.value as number);
 			case Token.StringLiteral:
-				return new Node.Literal(tok.value, tok.value as string);
+				return new Node.Literal(tok.value as string);
 
 			case Token.Keyword:
 				if (tok.value === 'if') {
 					return this.parseIfExpression();
 				}
 				else if (tok.value === 'var') {
-					return this.parseVarExpression();
+					return this.parseVarDeclaration('var');
 				}
 				else if (tok.value === 'for') {
 					return this.parseForExpression();
@@ -874,17 +1062,11 @@ export class Parser {
 						let stop = this.scanner.index;
 
 						this.consumeToken();
-						return new Node.Literal(
-							null, this.scanner.source.substring(
-								start, stop
-							)
-						);
+						return new Node.Literal(null);
 					}
 					else {
 						val = this.parseExpression(0);
-						console.log("A");
 						this.expectPunctuator(")");
-						console.log("B");
 						return val;
 					}
 				}
@@ -923,10 +1105,17 @@ export class Parser {
 		};
 	}
 
-	parseExpression(minprec?: number) {
+	parseExpression(minprec: number) {
 		let lhs = this.parseAtom(), op;
 
 		while (op = this.nextBinaryOperator(minprec as number)) {
+			// Object literal parsing is a special-case arbitrary
+			//  arity operator composed of commas and colons
+			if (op.token.value === ',' || op.token.value === ":") {
+				lhs = this.parseObjectLiteral(lhs, op.value);
+				continue;
+			}
+			
 			let next_min_prec = op.prec + op.leftassoc;
 
 			let rhs = this.parseExpression(next_min_prec);

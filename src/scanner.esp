@@ -1,4 +1,4 @@
-use Token = import "./token";
+var Token = import "./token";
 
 var Messages = {
 	UnexpectedToken: "Unexpected token"
@@ -20,7 +20,7 @@ proto Character {
 	}
 };
 
-export proto Scanner {
+return proto Scanner {
 	let new(code, handler) {
 		this.source = code;
 		this.index = 0;

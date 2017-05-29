@@ -11,6 +11,10 @@ interface Elseable {
 	alt: Node.Expression | null;
 }
 
+const
+	GROUPSTART = {")":"(", "]":"[", "}":"{"},
+	GROUPEND = {"(":")", "[":"]", "{":"}"};
+
 /**
  * Unary operator precedences.
 **/
@@ -29,6 +33,7 @@ const BINARYOPS = {
 	//')': 0,
 	// Technical
 	';': 0x00,
+	":": 0x01,
 	',': 0x01,
 	'=': 0x01,
 	//']': 0,
@@ -56,17 +61,20 @@ const BINARYOPS = {
 	'<<': 0x53,
 	'>>': 0x53,
 	'>>>': 0x53,
+	
+	// Groups
+	"(": 0xa0, "[":0xa0, "{": 0xa0,
 
 	// Referencing
-	"::": 0xa0, '.': 0xa1
+	"::": 0xb0, '.': 0xb1
 };
 
 /**
  * Operations that are right-associating
 **/
-const RIGHTOPS = [';'];
+const RIGHTOPS = [';', "(", '[', "{"];
 
-const COMPACT = BINARYOPS[';'], PARAMETER = BINARYOPS[','];
+const COMPACT = BINARYOPS[';'] + 1, PARAMETER = BINARYOPS[','];
 
 function summarize_token(tok) {
 	return TokenName[tok.type] + "{" + tok.value + "}";
@@ -92,8 +100,16 @@ export class Parser {
 		this.nextToken();
 	}
 	
+	summarizePosition() {
+		return "(ln: " + this.scanner.lineNumber +
+			", pos: " + this.scanner.index + ")";
+	}
+	
 	unexpectedToken(tok) {
-		return new Error("Unexpected " + summarize_token(tok));
+		return new Error(
+			"Unexpected " + summarize_token(tok) + " at " +
+			this.summarizePosition()
+		);
 	}
 
 	/*
@@ -168,7 +184,8 @@ export class Parser {
 		if (token.type !== type || (value && token.value !== value)) {
 			throw new Error(
 				"Expected " + summarize_token({type, value: value || ""}) +
-				", got " + summarize_token(token)
+				", got " + summarize_token(token) +
+				" " + this.summarizePosition()
 			);
 		}
 
@@ -533,28 +550,89 @@ export class Parser {
 		return pattern;
 	}
 	*/
+	
+	parseParams(start) {
+		let
+			params: Node.ObjectProperty[] = [],
+			offset: number = 0;
+		
+		do {
+			let prop = this.parseObjectProperty(offset);
+			if (prop.isArraylike) {
+				++offset;
+			}
+			
+			params.push(prop);
+			
+			if (this.matchPunctuator(',')) {
+				this.consumeToken();
+				continue;
+			}
+			else {
+				break;
+			}
+		} while (true);
+		
+		this.expectPunctuator(GROUPEND[start]);
+		
+		return new Node.ObjectLiteral(params);
+	}
+	
+	parseNew() {
+		let
+			callee = this.parseExpression(COMPACT),
+			tok = this.nextToken();
+		if (tok.value === "(" || tok.value === '[' || tok.value === "{") {
+			return new Node.NewExpression(
+				callee, this.parseParams(GROUPEND[tok.value])
+			);
+		}
+		
+		return new Node.NewExpression(
+			callee, new Node.ObjectLiteral([])
+		);
+	}
+	
+	/**
+	 * Espresso function names must be capable of supporting non-
+	 *  identifiers for operator overloads.
+	**/
+	parseFunctionName() {
+		let n: Node.Identifier | null = null;
+		
+		if (this.matchPunctuator("(")) {
+			return null;
+		}
+		if (this.matchPunctuator('[')) {
+			this.expectPunctuator(']');
+			return new Node.Identifier("[]");
+		}
+		if (this.matchPunctuator('{')) {
+			this.expectPunctuator('}');
+			return new Node.Identifier("{}");
+		}
+		
+		let tok = this.nextToken();
+		this.consumeToken();
+		
+		return new Node.Identifier(tok.value as string);
+	}
 
 	parseFunctionExpression(): Node.FunctionExpression | Node.FunctionExpression {
-		let name: Node.Identifier | null = null,
+		let name: Node.Identifier | null = this.parseFunctionName(),
 			params: Node.FunctionParameter[] = [],
 			body;
-		let tok = this.nextToken();
-
-		if (tok.type === Token.Identifier) {
-			name = new Node.Identifier(tok.value as string);
-			this.consumeToken();
-		}
 		
 		this.expectPunctuator("(");
 		
-		tok = this.nextToken();
+		let tok = this.nextToken();
 		while (tok.value && tok.value != ")") {
 			if (tok.type == Token.Identifier) {
 				this.consumeToken();
 				
 				let
 					name = new Node.Identifier(tok.value),
-					value: Node.Expression | null;
+					value: Node.Expression | null = null;
 				
 				if (this.matchPunctuator('=')) {
 					this.consumeToken();
@@ -562,8 +640,10 @@ export class Parser {
 					value = this.parseExpression(COMPACT);
 				}
 				
+				params.push(new Node.FunctionParameter(name, value));
+				
 				if (this.matchPunctuator(")")) {
-					this.consumeToken();
+					break;
 				}
 			}
 			else {
@@ -574,7 +654,7 @@ export class Parser {
 		}
 		
 		this.expectPunctuator(")");
-
+		
 		body = this.parseExpression(COMPACT);
 
 		return new Node.FunctionExpression(name as Node.Identifier, params, body, false);
@@ -887,38 +967,31 @@ export class Parser {
 	parseObjectProperty(offset: number): Node.ObjectProperty {
 		let
 			tok = this.nextToken(),
-			key: boolean = false,
-			a: Node.Expression, b: Node.Expression;
+			ial: boolean = false,
+			k: Node.Expression, v: Node.Expression;
 		
 		if (tok.type === Token.Identifier || tok.type === Token.Keyword) {
 			this.consumeToken();
 			
-			key = true;
+			if (this.matchPunctuator(":")) {
+				this.consumeToken();
+				
+				k = new Node.Literal(tok.value as string);
+				v = this.parseExpression(COMPACT);
+			}
+			else {
+				ial = true;
+				k = new Node.Literal(offset);
+				v = new Node.Identifier(tok.value as string);
+			}
 		}
 		else {
-			a = this.parseExpression(COMPACT);
+			ial = true;
+			k = new Node.Literal(offset);
+			v = this.parseExpression(COMPACT);
 		}
 		
-		if (this.matchPunctuator(":")) {
-			this.consumeToken();
-			
-			if (key) {
-				a = new Node.Literal(tok.value as string);
-			}
-			
-			b = this.parseExpression(COMPACT);
-		}
-		else {
-			if (key) {
-				a = new Node.Identifier(tok.value as string);
-			}
-			
-			return new Node.ObjectProperty(
-				true, new Node.Literal(offset), a
-			);
-		}
-		
-		return new Node.ObjectProperty(false, a, b);
+		return new Node.ObjectProperty(ial, k, v);
 	}
 	
 	parseObjectLiteral(lhs, starter): Node.ObjectLiteral {
@@ -991,14 +1064,26 @@ export class Parser {
 		
 		return false;
 	}
+	
+	parseGroup(end) {
+		if (this.matchPunctuator(end)) {
+			let stop = this.scanner.index;
+
+			this.consumeToken();
+			return new Node.Literal(null);
+		}
+		else {
+			let val = this.parseExpression(0);
+			this.expectPunctuator(end);
+			return val;
+		}
+	}
 
 	parseAtom() {
 		let start = this.scanner.index;
 		let tok = this.nextToken(), val, op;
 
 		this.consumeToken();
-
-		console.log(tok);
 
 		switch (tok.type) {
 			case Token.BooleanLiteral:
@@ -1011,64 +1096,31 @@ export class Parser {
 				return new Node.Literal(tok.value as string);
 
 			case Token.Keyword:
-				if (tok.value === 'if') {
-					return this.parseIfExpression();
+				switch (tok.value) {
+					case 'if': return this.parseIfExpression();
+					case 'var': return this.parseVarDeclaration('var');
+					case 'for': return this.parseForExpression();
+					case 'case': return this.parseCaseExpression();
+					case 'while': return this.parseWhileExpression();
+					case 'do': return this.parseDoBlock();
+					case 'let': return this.parseFunctionExpression();
+					case 'new': return this.parseNew();
+					case 'proto': return this.parseProto();
+					case 'import': return this.parseImportExpression();
+					case 'export': return this.parseExportExpression();
+					case 'return': return this.parseReturnExpression();
+					case 'yield': return this.parseYieldExpression();
+					case 'fail':
+						return new Node.FailExpression(
+							this.parseExpression(COMPACT)
+						);
+					case 'with': return this.parseWithExpression();
+					case 'this': return new Node.ThisExpression();
 				}
-				else if (tok.value === 'var') {
-					return this.parseVarDeclaration('var');
-				}
-				else if (tok.value === 'for') {
-					return this.parseForExpression();
-				}
-				else if (tok.value === 'case') {
-					return this.parseCaseExpression();
-				}
-				else if (tok.value === 'while') {
-					return this.parseWhileExpression();
-				}
-				else if (tok.value === 'do') {
-					return this.parseDoBlock();
-				}
-				else if (tok.value === 'let') {
-					return this.parseFunctionExpression();
-				}
-				else if (tok.value === 'proto') {
-					return this.parseProto();
-				}
-				else if (tok.value === 'import') {
-					return this.parseImportExpression();
-				}
-				else if (tok.value === 'export') {
-					return this.parseExportExpression();
-				}
-				else if (tok.value === 'return') {
-					return this.parseReturnExpression();
-				}
-				else if (tok.value === 'yield') {
-					return this.parseYieldExpression();
-				}
-				else if (tok.value === 'fail') {
-					return new Node.FailExpression(
-						this.parseExpression(COMPACT)
-					);
-				}
-				else if (tok.value === 'with') {
-					return this.parseWithExpression();
-				}
+			//... Fallthrough
 			case Token.Punctuator:
-				// Ignore [ and { for now
-				if (tok.value == '(') {
-					if (this.matchPunctuator(")")) {
-						let stop = this.scanner.index;
-
-						this.consumeToken();
-						return new Node.Literal(null);
-					}
-					else {
-						val = this.parseExpression(0);
-						this.expectPunctuator(")");
-						return val;
-					}
+				if (tok.value in GROUPEND) {
+					return this.parseGroup(GROUPEND[tok.value]);
 				}
 			//... Fallthrough
 
@@ -1089,13 +1141,27 @@ export class Parser {
 		}
 	}
 
-	nextBinaryOperator(minprec: number) {
+	nextBinaryOperator(minprec: number, semi: boolean) {
 		let tok = this.nextToken();
 
 		let op = BINARYOPS[tok.value];
-
-		if (typeof op !== 'number' || op < minprec) {
-			return null;
+		
+		if (semi) {
+			if (typeof op !== 'number' || op < minprec) {
+				tok = {
+					type: Token.Punctuator, value: ';',
+					lineNumber: this.scanner.lineNumber,
+					lineStart: this.scanner.lineNumber,
+					start: 0, end: 0
+				};
+				
+				op = BINARYOPS[';'];
+			}
+		}
+		else {
+			if (typeof op !== 'number' || op < minprec) {
+				return null;
+			}
 		}
 
 		this.consumeToken();
@@ -1106,18 +1172,46 @@ export class Parser {
 	}
 
 	parseExpression(minprec: number) {
-		let lhs = this.parseAtom(), op;
+		let lhs = this.parseAtom(), semi = false, op;
 
-		while (op = this.nextBinaryOperator(minprec as number)) {
+		while (op = this.nextBinaryOperator(minprec, semi)) {
+			let tv = op.token.value;
+			
+			semi = false;
+			
 			// Object literal parsing is a special-case arbitrary
 			//  arity operator composed of commas and colons
-			if (op.token.value === ',' || op.token.value === ":") {
+			if (tv === ',' || tv === ":") {
 				lhs = this.parseObjectLiteral(lhs, op.value);
 				continue;
 			}
 			
+			if (tv in GROUPEND) {
+				lhs = new Node.CallExpression(
+					lhs, this.parseParams(GROUPEND[tv])
+				);
+				continue;
+			}
+			
+			if (tv === ';') {
+				let tok = this.nextToken();
+				semi = true;
+				
+				if (tok.value === ';' || tok.value in GROUPSTART) {
+					//this.consumeToken();
+					let nil = new Node.Literal(null);
+					if (lhs instanceof Node.Block) {
+						lhs.add(nil);
+					}
+					else {
+						lhs = new Node.Block([lhs, nil]);
+					}
+					continue;
+				}
+			}
+			
 			let next_min_prec = op.prec + op.leftassoc;
-
+			
 			let rhs = this.parseExpression(next_min_prec);
 
 			lhs = new Node.BinaryExpression(op.token.value, lhs, rhs);
@@ -1125,6 +1219,15 @@ export class Parser {
 
 		return lhs;
 	}
+	
+	/*
+	parseBlock(): Node.Block {
+		let statements: Node.Expression[] = [];
+		do {
+			let expr = this.parseStatement(0);
+			
+	}
+	*/
 
 	parseScript(): Node.Script {
 		// Consume the default EOF token

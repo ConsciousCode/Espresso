@@ -1,4 +1,4 @@
-**Espresso** is a language combining the best elements of Javascript, Lua, Python, Ruby, and Lisp with a few novel ideas thrown into the mix. It is meant to be fast, lightweight, easy to read, and easy to write.
+**Espresso** is a language combining the best elements of Javascript, Lua, Python, Ruby, Scala, and Lisp with a few novel ideas thrown into the mix. It is meant to be fast, lightweight, easy to read, and easy to write.
 
 This codebase was forked from [Esprima](https://github.com/jquery/esprima) to help jumpstart the language's design. Esprima is 1.) in JS, 2.) relatively small and easy to understand, and 3.) parses JS, which has a large amount of syntactic and semantic overlap with Espresso.
 
@@ -38,7 +38,7 @@ In Espresso, parentheses, square brackets, and curly braces are almost completel
 
 #### Variables
 Variables are scoped by the innermost grouping. They can be declared with either the `var` or `def` keywords - var indicates variables while def indicates constants. Both have the same syntax otherwise. A variable declaration uses the format `var name = init, ...`. Alternatively, one can use a destructuring pattern much like ECMA6. There are 3 variations of this syntax:
-* `var (a, b, c) = expr` assigns expr to `a`, `b`, and `c` simultaneously.
+* `var (a, b, c) = expr` assigns `expr` to `a`, `b`, and `c` simultaneously.
 * `var [a=x, b=y, c=z, ...d] = expr` expects `expr` to be an iterable and assigns the first, second, and third elements to `a`, `b`, and `c` , respectively - if the iterable lacks any of these indices, `x`, `y`, and `z` provide defaults. `d` consumes the rest of the iterable, if any, and without it iteration would terminate at the third value.
 * `var {a:u=x, b:v=y, c:w=z} = expr` expects `expr` to be any object. The colons indicate source:destination identifier pairs, and the equals sign allows you to optionally assign defaults. Accesses to nonexistent keys fail by default in Espresso.
 

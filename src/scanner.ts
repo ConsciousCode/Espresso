@@ -214,15 +214,23 @@ export class Scanner {
 
 	private isKeyword(id: string): boolean {
 		return [
-			'if', 'in', 'do',
-			'var', 'for', 'new', 'try', 'let',
-			'this', 'else', 'case', 'with', 'enum',
-			'while', 'break', 'catch', 'throw', 'const', 'yield',
-			'class', 'super',
-			'return', 'delete', 'switch', 'export', 'import',
-			'default', 'finally', 'extends',
-			'function', 'continue',
-			'instanceof'
+			"if", "else",
+			"try", "fail",
+			"for", "while",
+			"do", "with",
+			"new", "del",
+			"import", "export",
+			"proto", "enum",
+			"var", "def",
+			"let", "use",
+			"and", "or", "not",
+			"is", "in",
+			"as",
+			"case", "when",
+			"break", "continue", "redo",
+			"return", "yield",
+			"this", "super",
+			"true", "false", "nil"
 		].indexOf(id) != -1;
 	}
 
@@ -634,8 +642,6 @@ export class Scanner {
 				space = false;
 			}
 			ch = this.source[this.index];
-
-			console.log("Num", num, 'ch', JSON.stringify(ch), space)
 		}
 
 		if (ch === '.') {
@@ -879,8 +885,6 @@ export class Scanner {
 		}
 
 		this.scanComments();
-
-		console.log("Next char", JSON.stringify(this.source[this.index]));
 
 		const cp = this.source.charCodeAt(this.index);
 

@@ -1,8 +1,10 @@
-export type Expression = AwaitExpression | BinaryExpression | Identifier | FunctionExpression | Literal | NewExpression |
-	ThisExpression | UnaryExpression | UpdateExpression | YieldExpression | BreakExpression | ContinueExpression |
-	EmptyExpression | ForExpression |
-	IfExpression | ReturnExpression | SwitchExpression | FailExpression |
-	TryExpression | VariableDeclaration | WhileExpression | WithExpression | Import | Export | InvalidType;
+export type Expression =
+	AwaitExpression | BinaryExpression | Identifier | FunctionExpression |
+	Literal | NewExpression | ThisExpression | UnaryExpression |
+	UpdateExpression | YieldExpression | BreakExpression | ContinueExpression |
+	EmptyExpression | ForExpression | IfExpression | ReturnExpression |
+	SwitchExpression | FailExpression | TryExpression | VariableDeclaration |
+	WhileExpression | WithExpression | Import | Export | Block | InvalidType;
 
 /* tslint:disable:max-classes-per-file */
 
@@ -52,6 +54,18 @@ export class DoBlock {
 	constructor(body: Expression, loop: WhileExpression | null) {
 		this.body = body;
 		this.loop = loop;
+	}
+}
+
+export class Block {
+	// Not readonly, may be extended
+	body: Expression[];
+	constructor(body: Expression[]) {
+		this.body = body;
+	}
+	
+	add(expr: Expression) {
+		this.body.push(expr);
 	}
 }
 
@@ -163,8 +177,8 @@ export class ObjectLiteral {
 
 export class NewExpression {
 	readonly callee: Expression;
-	readonly arguments: Expression[];
-	constructor(callee: Expression, args: Expression[]) {
+	readonly arguments: ObjectLiteral;
+	constructor(callee: Expression, args: ObjectLiteral) {
 		this.callee = callee;
 		this.arguments = args;
 	}
@@ -216,6 +230,16 @@ export class FailExpression {
 	readonly argument: Expression;
 	constructor(argument: Expression) {
 		this.argument = argument;
+	}
+}
+
+export class CallExpression {
+	readonly callee: Expression;
+	readonly args: ObjectLiteral;
+	
+	constructor(callee: Expression, args: ObjectLiteral) {
+		this.callee = callee;
+		this.args = args;
 	}
 }
 

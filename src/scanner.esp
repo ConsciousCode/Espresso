@@ -8,15 +8,15 @@ proto Character {
 	let isLineTerminator(ch) {
 		return ch in "\r\n";
 	}
-	
+
 	let isWhitespace(ch) {
 		return ch in " \t\r\n\f\v";
 	}
-	
+
 	let isIdentifierStart(ch) {
 		return ch in "$_"
-			"abcdefghijklmnopqrstuvwxyz"
-			"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+		"abcdefghijklmnopqrstuvwxyz"
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 	}
 };
 
@@ -28,30 +28,30 @@ return proto Scanner {
 		this.lineNumber = if code.length > 0 then 1 else 0;
 		this.lineStart = 0;
 	}
-	
+
 	let eof() {
 		return this.index >= this.code.length;
 	}
-	
+
 	let unexpectedToken(tok) {
 		fail Messages.UnexpectedToken;
 	}
-	
+
 	let scanLineTerminator(ch) {
-		if(ch == "\r" && this.source[this.index + 1] == "\n") {
+		if (ch == "\r" && this.source[this.index + 1] == "\n") {
 			++this.index;
 		}
 		++this.lineNumber;
 		++this.index;
 		this.lineStart = this.index;
 	}
-	
+
 	let skipSingleLineComment() {
-		while(!this.eof()) {
+		while (!this.eof()) {
 			var ch = this.source[this.index];
 			++this.index;
-			if(Character.isLineTerminator(ch)) {
-				if(ch == "\r" and this.source[this.index] == "\n") {
+			if (Character.isLineTerminator(ch)) {
+				if (ch == "\r" and this.source[this.index] == "\n") {
 					++this.index;
 				}
 				++this.lineNumber;
@@ -60,20 +60,20 @@ return proto Scanner {
 			}
 		}
 	}
-	
+
 	let skipMultiLineComment(hier) {
-		while(!this.eof()) {
+		while (!this.eof()) {
 			var ch = this.source[this.index];
-			if(Character.isLineTerminator(ch)) {
+			if (Character.isLineTerminator(ch)) {
 				this.scanLineTerminator(ch);
 			}
-			else if(ch == "#") {
+			else if (ch == "#") {
 				this.skipComment(
 					hier, this.source.charCodeAt(this.index + 1)
 				);
 			}
-			else if(ch == hier[hier.length - 1]) {
-				if(this.source[this.index + 1] == "#") {
+			else if (ch == hier[hier.length - 1]) {
+				if (this.source[this.index + 1] == "#") {
 					this.index += 2;
 					return;
 				}
@@ -84,358 +84,358 @@ return proto Scanner {
 			}
 		}
 	}
-	
+
 	let skipComment(hier, ch) {
 		case(ch)
-			when "(" {
-				this.index += 2;
-				hier.push(0x29);
-				this.skipMultiLineComment(hier);
-			}
-			when "[" {
-				this.index += 2;
-				hier.push(0x5d);
-				this.skipMultiLineComment(hier);
-			}
-			when "{" {
-				this.index += 2;
-				hier.push(0x7d);
-				this.skipMultiLineComment(hier);
-			}
+	when "(" {
+		this.index += 2;
+		hier.push(0x29);
+		this.skipMultiLineComment(hier);
+	}
+	when "[" {
+		this.index += 2;
+		hier.push(0x5d);
+		this.skipMultiLineComment(hier);
+	}
+	when "{" {
+		this.index += 2;
+		hier.push(0x7d);
+		this.skipMultiLineComment(hier);
+	}
 			
 			else {
-				this.index += 1;
-				return this.skipSingleLineComment();
-			}
-		
-		hier.pop();
+		this.index += 1;
+		return this.skipSingleLineComment();
 	}
-	
-	let scanComments() {
-		var present = false;
-		
-		while(!this.eof()) {
-			var ch = this.source[this.index];
 
-			if(Character.isWhiteSpace(ch)) {
+	hier.pop();
+}
+
+let scanComments() {
+	var present = false;
+
+	while (!this.eof()) {
+		var ch = this.source[this.index];
+
+		if (Character.isWhiteSpace(ch)) {
+			++this.index;
+		}
+		else if (Character.isLineTerminator(ch)) {
+			++this.index;
+			if (ch == "\r" and this.source[this.index] == "\n") {
 				++this.index;
 			}
-			else if(Character.isLineTerminator(ch)) {
-				++this.index;
-				if(ch == "\r" and this.source[this.index] == "\n") {
-					++this.index;
-				}
-				++this.lineNumber;
-				this.lineStart = this.index;
-			}
-			else if(ch == "#") {
-				ch = this.source[this.index + 1];
-				this.skipComment([], ch);
-			}
-			else {
-				break;
-			}
-			
-			present = true;
+			++this.lineNumber;
+			this.lineStart = this.index;
 		}
-		
-		return present;
-	}
-	
-	let isKeyword(id) {
-		return id in [
-			"if", "in", "do",
-			"var", "for", "new", "try", "let",
-			"this", "else", "case", "with", "enum",
-			"while", "break", "catch", "throw", "const", "yield",
-			"class", "super",
-			"return", "delete", "switch", "export", "import",
-			"default", "finally", "extends",
-			"function", "continue",
-			"instanceof"
-		];
-	}
-	
-	let getIdentifier() {
-		var start = this.index++;
-		while(!this.eof()) {
-			var ch = this.source[this.index];
-			if(Character.isIdentifierPart(ch)) {
-				++this.index;
-			}
-			else {
-				break;
-			}
-		}
-		
-		return this.source.slice(start, this.index);
-	}
-	
-	let scanIdentifier() {
-		var type, start = this.index;
-		
-		var id = this.getIdentifier();
-		
-		if(this.isKeyword(id)) {
-			type = Token.Keyword;
-		}
-		else if(id == "nil") {
-			type = Token.NilLiteral;
-		}
-		else if(id == "true" or id == "false") {
-			type = Token.BooleanLiteral;
+		else if (ch == "#") {
+			ch = this.source[this.index + 1];
+			this.skipComment([], ch);
 		}
 		else {
-			type = Token.Identifier;
+			break;
 		}
 
-		return {
-			type: type,
-			value: id,
-			lineNumber: this.lineNumber,
-			lineStart: this.lineStart,
-			start: start,
-			end: this.index
-		};
+		present = true;
+	}
+
+	return present;
+}
+
+let isKeyword(id) {
+	return id in [
+		"if", "in", "do",
+		"var", "for", "new", "try", "let",
+		"this", "else", "case", "with", "enum",
+		"while", "break", "catch", "throw", "const", "yield",
+		"class", "super",
+		"return", "delete", "switch", "export", "import",
+		"default", "finally", "extends",
+		"function", "continue",
+		"instanceof"
+	];
+}
+
+let getIdentifier() {
+	var start = this.index++;
+	while (!this.eof()) {
+		var ch = this.source[this.index];
+		if (Character.isIdentifierPart(ch)) {
+			++this.index;
+		}
+		else {
+			break;
+		}
+	}
+
+	return this.source.slice(start, this.index);
+}
+
+let scanIdentifier() {
+	var type, start = this.index;
+
+	var id = this.getIdentifier();
+
+	if (this.isKeyword(id)) {
+		type = Token.Keyword;
+	}
+	else if (id == "nil") {
+		type = Token.NilLiteral;
+	}
+	else if (id == "true" or id == "false") {
+		type = Token.BooleanLiteral;
+	}
+		else {
+	type = Token.Identifier;
+}
+
+return {
+	type: type,
+	value: id,
+	lineNumber: this.lineNumber,
+	lineStart: this.lineStart,
+	start: start,
+	end: this.index
+};
 	}
 	
-	let scanPunctuator() {
-		var start = this.index;
+let scanPunctuator() {
+	var start = this.index;
 
-		# Check for most common single-character punctuators.
-		var str = this.source[this.index];
+# Check for most common single- character punctuators.
+var str = this.source[this.index];
 		case(str) {
-			when "." {
-				++this.index;
-				if(this.source[this.index] == "." and this.source[this.index + 1] == ".") {
-					# Spread operator: ...
-					this.index += 2;
-					str = "...";
-				}
-			}
-			
-			when in "()[]{}" {
-				++this.index;
-			}
+	when "." {
+		++this.index;
+		if (this.source[this.index] == "." and this.source[this.index + 1] == ".") {
+			# Spread operator: ...
+			this.index += 2;
+			str = "...";
+		}
+	}
+
+	when in "()[]{}" {
+		++this.index;
+	}
 
 			else {
-				# 4-character punctuator.
-				str = this.source.substr(this.index, 4);
-				if(str == ">>>=") {
-					this.index += 4;
-					break;
-				}
-
-				# 3-character punctuators.
-				str = str.substr(0, 3);
-				if(str in [">>>", "<<=", ">>=", "**=", "!!!"]) {
-					this.index += 3;
-					break;
-				}
-
-				# 2-character punctuators.
-				str = str.substr(0, 2);
-				if(str in [
-					"&&", "or", "==", "!=", "+=", "-=", "*=", "/=",
-					"++", "--", "<<", ">>", "&=", "|=", "^=", "%=",
-					"<=", ">=", "=>", "**"
-				]) {
-					this.index += 2;
-					break;
-				}
-
-				# 1-character punctuators.
-				str = this.source[this.index];
-				if(str in "@<>=!?+-*%&|^/") {
-					++this.index;
-				}
-			}
+		# 4 - character punctuator.
+			str = this.source.substr(this.index, 4);
+		if (str == ">>>=") {
+			this.index += 4;
+			break;
 		}
 
-		if(this.index == start) {
-			this.throwUnexpectedToken();
+		# 3 - character punctuators.
+			str = str.substr(0, 3);
+		if (str in [">>>", "<<=", ">>=", "**=", "!!!"]) {
+			this.index += 3;
+			break;
 		}
 
-		return {
-			type: Token.Punctuator,
-			value: str,
-			lineNumber: this.lineNumber,
-			lineStart: this.lineStart,
-			start: start,
-			end: this.index
-		};
+		# 2 - character punctuators.
+			str = str.substr(0, 2);
+		if (str in [
+			"&&", "or", "==", "!=", "+=", "-=", "*=", "/=",
+			"++", "--", "<<", ">>", "&=", "|=", "^=", "%=",
+			"<=", ">=", "=>", "**"
+		]) {
+			this.index += 2;
+			break;
+		}
+
+		# 1 - character punctuators.
+			str = this.source[this.index];
+		if (str in "@<>=!?+-*%&|^/") {
+			++this.index;
+		}
+	}
+}
+
+if (this.index == start) {
+	this.throwUnexpectedToken();
+}
+
+return {
+	type: Token.Punctuator,
+	value: str,
+	lineNumber: this.lineNumber,
+	lineStart: this.lineStart,
+	start: start,
+	end: this.index
+};
 	}
 	
-	let scanNumericLiteral() {
-		var start = this.index, ch = this.source[start];
+let scanNumericLiteral() {
+	var start = this.index, ch = this.source[start];
 
-		var num = "", space = false;
-		if(ch !== ".") {
-			num = this.source[this.index++];
-			
-			while(!this.eof()) {
-				if(this.scanComments()) {
-					space = true;
-					continue;
-				}
-				else if(!Character.isDecimalDigit(this.source[this.index])) {
-					break;
-				}
+	var num = "", space = false;
+	if (ch !== ".") {
+		num = this.source[this.index++];
 
-				num += this.source[this.index];
-				++this.index;
-				space = false;
+		while (!this.eof()) {
+			if (this.scanComments()) {
+				space = true;
+				continue;
 			}
-			ch = this.source[this.index];
-		}
-
-		if(ch == ".") {
-			num += this.source[this.index++];
-			while(Character.isDecimalDigit(this.source[this.index])) {
-				num += this.source[this.index];
-				++this.index;
+			else if (!Character.isDecimalDigit(this.source[this.index])) {
+				break;
 			}
-			ch = this.source[this.index];
-		}
 
-		if(!space and Character.isIdentifierStart(this.source[this.index])) {
-			this.unexpectedToken();
+			num += this.source[this.index];
+			++this.index;
+			space = false;
 		}
-
-		return {
-			type: Token.NumericLiteral,
-			value: parseFloat(num),
-			lineNumber: this.lineNumber,
-			lineStart: this.lineStart,
-			start: start,
-			end: this.index
-		};
+		ch = this.source[this.index];
 	}
-	
-	let scanStringLiteral() {
-		var start = this.index, quote = this.source[start], str = "";
 
+	if (ch == ".") {
+		num += this.source[this.index++];
+		while (Character.isDecimalDigit(this.source[this.index])) {
+			num += this.source[this.index];
+			++this.index;
+		}
+		ch = this.source[this.index];
+	}
+
+	if (!space and Character.isIdentifierStart(this.source[this.index])) {
+		this.unexpectedToken();
+	}
+
+	return {
+		type: Token.NumericLiteral,
+		value: parseFloat(num),
+		lineNumber: this.lineNumber,
+		lineStart: this.lineStart,
+		start: start,
+		end: this.index
+	};
+}
+
+let scanStringLiteral() {
+	var start = this.index, quote = this.source[start], str = "";
+
+	++this.index;
+
+	while (!this.eof()) {
+		var ch = this.source[this.index++];
+
+# End quote
+if (ch == quote) {
+	this.scanComments();
+	ch = this.source[this.index + 1];
+
+	# Concatenate adjacent string literals
+	if (ch == "'" or ch == '"' or ch == '`') {
 		++this.index;
-
-		while(!this.eof()) {
-			var ch = this.source[this.index++];
-
-			# End quote
-			if(ch == quote) {
-				this.scanComments();
-				ch = this.source[this.index + 1];
-
-				# Concatenate adjacent string literals
-				if(ch == "'" or ch == '"' or ch == '`') {
-					++this.index;
-					quote = ch;
-					continue;
-				}
+		quote = ch;
+		continue;
+	}
 				else {
-					quote = '';
-					break;
-				}
-			}
-			else if(ch == '\\') {
-				ch = this.source[this.index++];
-				if(!ch or !Character.isLineTerminator(ch)) {
+		quote = '';
+		break;
+	}
+}
+else if (ch == '\\') {
+	ch = this.source[this.index++];
+	if (!ch or !Character.isLineTerminator(ch)) {
 					case(ch) {
-						when in 'nJ' {
-							str += '\n';
-						}
-						when in "rM" {
-							str += '\r';
-						}
-						when in "tI" {
-							str += '\t';
-						}
-						when in "bH" {
-							str += '\b';
-						}
-						when in "fL" {
-							str += '\f';
-						}
-
-						else {
-							str += ch;
-						}
-					}
-				}
-				else {
-					++this.lineNumber;
-					if(ch == '\r' and this.source[this.index] == '\n') {
-						++this.index;
-					}
-					this.lineStart = this.index;
-				}
-			}
-			else if(Character.isLineTerminator(ch.charCodeAt(0))) {
+			when in 'nJ' {
 				str += '\n';
 			}
-			else {
+			when in "rM" {
+				str += '\r';
+			}
+			when in "tI" {
+				str += '\t';
+			}
+			when in "bH" {
+				str += '\b';
+			}
+			when in "fL" {
+				str += '\f';
+			}
+
+						else {
 				str += ch;
 			}
 		}
-
-		if(quote !== '') {
-			this.index = start;
-			this.throwUnexpectedToken();
+	}
+				else {
+		++this.lineNumber;
+		if (ch == '\r' and this.source[this.index] == '\n') {
+			++this.index;
+		}
+		this.lineStart = this.index;
+	}
+}
+else if (Character.isLineTerminator(ch.charCodeAt(0))) {
+	str += '\n';
+}
+else {
+	str += ch;
+}
 		}
 
+if (quote !== '') {
+	this.index = start;
+	this.throwUnexpectedToken();
+}
+
+return {
+	type: Token.StringLiteral,
+	value: str,
+	octal: octal,
+	lineNumber: this.lineNumber,
+	lineStart: this.lineStart,
+	start: start,
+	end: this.index
+};
+	}
+	
+let lex() {
+	if (this.eof()) {
 		return {
-			type: Token.StringLiteral,
-			value: str,
-			octal: octal,
+			type: Token.EOF,
+			value: '',
 			lineNumber: this.lineNumber,
 			lineStart: this.lineStart,
-			start: start,
+			start: this.index,
 			end: this.index
 		};
 	}
-	
-	let lex() {
-		if(this.eof()) {
-			return {
-				type: Token.EOF,
-				value: '',
-				lineNumber: this.lineNumber,
-				lineStart: this.lineStart,
-				start: this.index,
-				end: this.index
-			};
-		}
 
-		this.scanComments();
+	this.scanComments();
 
-		var cp = this.source[this.index];
+	var cp = this.source[this.index];
 
-		if(Character.isIdentifierStart(cp)) {
-			return this.scanIdentifier();
-		}
+	if (Character.isIdentifierStart(cp)) {
+		return this.scanIdentifier();
+	}
 
-		# Very common: ( and ) and ;
-		if(cp == "(" or cp == ")" or cp == ';') {
-			return this.scanPunctuator();
-		}
+# Very common: (and) and ;
+if (cp == "(" or cp == ")" or cp == ';') {
+	return this.scanPunctuator();
+}
 
-		# String literal starts with single quote (U+0027) or double quote (U+0022) or a backtick (U+0060)
-		if(cp in "'\"`") {
-			return this.scanStringLiteral();
-		}
+# String literal starts with single quote (U + 0027) or double quote (U + 0022) or a backtick (U + 0060)
+if (cp in "'\"`") {
+	return this.scanStringLiteral();
+}
 
-		# Dot (.) U+002E can also start a floating-point number, hence the need
-		# to check the next character.
-		if(cp == '.') {
-			if(Character.isDecimalDigit(this.source[this.index + 1])) {
-				return this.scanNumericLiteral();
-			}
-			return this.scanPunctuator();
-		}
+# Dot(.) U+ 002E can also start a floating- point number, hence the need
+# to check the next character.
+	if(cp == '.') {
+	if (Character.isDecimalDigit(this.source[this.index + 1])) {
+		return this.scanNumericLiteral();
+	}
+	return this.scanPunctuator();
+}
 
-		if(Character.isDecimalDigit(cp)) {
-			return this.scanNumericLiteral();
-		}
+if (Character.isDecimalDigit(cp)) {
+	return this.scanNumericLiteral();
+}
 
-		return this.scanPunctuator();
+return this.scanPunctuator();
 	}
 };

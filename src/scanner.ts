@@ -1,206 +1,135 @@
-import { assert } from './assert';
 import { Character } from './character';
-import { ErrorHandler } from './error-handler';
-import { Messages } from './messages';
 import { Token } from './token';
 
 function hexValue(ch: string): number {
 	return '0123456789abcdef'.indexOf(ch.toLowerCase());
 }
 
-function octalValue(ch: string): number {
-	return '01234567'.indexOf(ch);
-}
-
 export interface Position {
 	line: number;
-	column: number;
-}
-
-export interface SourceLocation {
-	start: Position;
-	end: Position;
-	source?: string;
-}
-
-export interface Comment {
-	multiLine: boolean;
-	slice: number[];
-	range: [number, number];
-	loc: SourceLocation;
+	col: number;
+	start: number;
+	end: number;
 }
 
 export interface RawToken {
 	type: Token;
 	value: string | number;
-	pattern?: string;
-	flags?: string;
-	regex?: RegExp | null;
-	octal?: boolean;
-	cooked?: string;
-	head?: boolean;
-	tail?: boolean;
-	lineNumber: number;
-	lineStart: number;
-	start: number;
-	end: number;
-}
 
-interface ScannerState {
-	index: number;
-	lineNumber: number;
-	lineStart: number;
+	pos?: Position;
 }
 
 export class Scanner {
 	readonly source: string;
-	readonly errorHandler: ErrorHandler;
-	trackComment: boolean;
+	readonly length: number;
+
+	lookahead: string;
 
 	index: number;
-	lineNumber: number;
-	lineStart: number;
+	line: number;
+	col: number;
 
-	private readonly length: number;
-
-	constructor(code: string, handler: ErrorHandler) {
+	constructor(code: string) {
 		this.source = code;
-		this.errorHandler = handler;
-		this.trackComment = false;
-
 		this.length = code.length;
 		this.index = 0;
-		this.lineNumber = (code.length > 0) ? 1 : 0;
-		this.lineStart = 0;
-	}
+		this.line = 1;
+		this.col = 0;
 
-	public saveState(): ScannerState {
-		return {
-			index: this.index,
-			lineNumber: this.lineNumber,
-			lineStart: this.lineStart
-		};
-	}
-
-	public restoreState(state: ScannerState): void {
-		this.index = state.index;
-		this.lineNumber = state.lineNumber;
-		this.lineStart = state.lineStart;
+		this.lookahead = code[0];
 	}
 
 	public eof(): boolean {
 		return this.index >= this.length;
 	}
 
-	public throwUnexpectedToken(message = Messages.UnexpectedTokenIllegal): never {
-		return this.errorHandler.throwError(this.index, this.lineNumber,
-			this.index - this.lineStart + 1, message);
-	}
-
-	private tolerateUnexpectedToken(message = Messages.UnexpectedTokenIllegal) {
-		this.errorHandler.tolerateError(this.index, this.lineNumber,
-			this.index - this.lineStart + 1, message);
-	}
-
-	private scanLineTerminator(ch) {
-		// 0x0D is \r, 0x0a is \n
-		if (ch === 0x0D && this.source.charCodeAt(this.index + 1) === 0x0A) {
-			++this.index;
+	public scanError(msg?: string): Error {
+		if(msg) {
+			return new Error(
+				"Scanning error (" +
+				this.line + ":" +
+				this.col + "|" +
+				this.index + "): " + msg
+			);
 		}
-		++this.lineNumber;
-		++this.index;
-		this.lineStart = this.index;
+		return new Error("Unexpected token");
 	}
 
-	// https://tc39.github.io/ecma262/#sec-comments
-
-	private skipSingleLineComment() {
-		while (!this.eof()) {
-			const ch = this.source.charCodeAt(this.index);
-			++this.index;
-			if (Character.isLineTerminator(ch)) {
-				if (ch === 13 && this.source.charCodeAt(this.index) === 10) {
+	consume(): string {
+		let c = this.source[++this.index];
+		switch(c) {
+			case '\r':
+				if(this.source[this.index] == '\n') {
 					++this.index;
 				}
-				++this.lineNumber;
-				this.lineStart = this.index;
-				return;
-			}
-		}
-	}
-
-	private skipMultiLineComment(hier: number[]) {
-		while (!this.eof()) {
-			let ch = this.source.charCodeAt(this.index);
-			if (Character.isLineTerminator(ch)) {
-				this.scanLineTerminator(ch);
-				// 0x23 is #, process inner comment
-			} else if (ch === 0x23) {
-				this.skipComment(
-					hier, this.source.charCodeAt(this.index + 1)
-				);
-			} else if (ch === hier[hier.length - 1]) {
-				// Block comment ends with '<close>#'.
-				// 0x23 is #
-				if (this.source.charCodeAt(this.index + 1) === 0x23) {
-					this.index += 2;
-					return;
-				}
-				++this.index;
-			} else {
-				++this.index;
-			}
-		}
-
-		// ?
-		this.tolerateUnexpectedToken();
-		return;
-	}
-
-	public skipComment(hier, ch) {
-		let comment;
-		switch (ch) {
-			case 0x28: // (
-				this.index += 2;
-				hier.push(0x29);
-				comment = this.skipMultiLineComment(hier);
+			case '\n':
+				++this.line;
+				this.col = 0;
+				this.lookahead = '\n';
 				break;
-			case 0x5b: // [
-				this.index += 2;
-				hier.push(0x5d);
-				comment = this.skipMultiLineComment(hier);
-				break;
-			case 0x7b: // {
-				this.index += 2;
-				hier.push(0x7d);
-				comment = this.skipMultiLineComment(hier);
-				break;
+
 			default:
-				this.index += 1;
-				return this.skipSingleLineComment();
+				this.lookahead = c;
+				++this.col;
 		}
 
-		hier.pop();
+		return this.lookahead;
 	}
 
-	public scanComments() {
-		let present = false;
-		while (!this.eof()) {
-			let ch = this.source.charCodeAt(this.index);
+	next(): string {
+		if(this.lookahead) {
+			return this.lookahead;
+		}
+		return this.consume();
+	}
 
-			if (Character.isWhiteSpace(ch)) {
-				++this.index;
-			} else if (Character.isLineTerminator(ch)) {
-				++this.index;
-				if (ch === 0x0D && this.source.charCodeAt(this.index) === 0x0A) {
-					++this.index;
+	getPosition(): Position {
+		return {
+			line: this.line,
+			col: this.col,
+			start: this.index,
+			end: 0
+		}
+	}
+
+	skipSingleLineComment() {
+		while(!this.eof() && this.consume() != '\n') { }
+	}
+
+	skipMultiLineComment(type: string) {
+		let end = Character.toGroupClose(type);
+		while(!this.eof()) {
+			let ch = this.consume();
+			if(ch === "#") {
+				ch = this.consume();
+				if(Character.isGroupOpen(ch)) {
+					this.skipMultiLineComment(ch);
 				}
-				++this.lineNumber;
-				this.lineStart = this.index;
-			} else if (ch === 0x23) { // U+0023 is '#'
-				ch = this.source.charCodeAt(this.index + 1);
-				const comment = this.skipComment([], ch);
-			} else {
+			}
+			else if(ch === end) {
+				// Block comment ends with '<close>#''
+				if(this.consume() == "#") {
+					break;
+				}
+			}
+		}
+	}
+
+	public scanComments(): boolean {
+		let present = false;
+		while(!this.eof()) {
+			let ch = this.next();
+
+			if(ch === "#") {
+				ch = this.consume();
+				if(Character.isGroupOpen(ch)) {
+					this.skipMultiLineComment(ch);
+				}
+				else {
+					this.skipSingleLineComment();
+				}
+			}
+			else if(!Character.isWhiteSpace(ch)) {
 				break;
 			}
 
@@ -210,9 +139,29 @@ export class Scanner {
 		return present;
 	}
 
-	// https://tc39.github.io/ecma262/#sec-keywords
+	scanGroup(): RawToken | null {
+		let ch = this.next(), pos = this.getPosition();
+		let type: Token;
+		if(Character.isGroupOpen(ch)) {
+			type = Token.GroupOpen;
+		}
+		else if(Character.isGroupClose(ch)) {
+			type = Token.GroupClose;
+		}
+		else {
+			return null;
+		}
 
-	private isKeyword(id: string): boolean {
+		this.consume();
+
+		return {
+			type: type,
+			value: ch,
+			pos: pos
+		};
+	}
+
+	isKeyword(id: string): boolean {
 		return [
 			"if", "else",
 			"try", "fail",
@@ -234,695 +183,305 @@ export class Scanner {
 		].indexOf(id) != -1;
 	}
 
-	private codePointAt(i: number): number {
-		let cp = this.source.charCodeAt(i);
+	scanHexEscape(len: number): string | null {
+		let code = 0, ch = this.next();
 
-		if (cp >= 0xD800 && cp <= 0xDBFF) {
-			const second = this.source.charCodeAt(i + 1);
-			if (second >= 0xDC00 && second <= 0xDFFF) {
-				const first = cp;
-				cp = (first - 0xD800) * 0x400 + second - 0xDC00 + 0x10000;
+		for(let i = 0; i < len; ++i) {
+			if(!this.eof() && Character.isHexDigit(this.consume())) {
+				code = code * 16 + hexValue(ch);
+				ch = this.consume();
 			}
-		}
-
-		return cp;
-	}
-
-	private scanHexEscape(prefix: string): string | null {
-		const len = (prefix === 'u') ? 4 : 2;
-		let code = 0;
-
-		for (let i = 0; i < len; ++i) {
-			if (!this.eof() && Character.isHexDigit(this.source.charCodeAt(this.index))) {
-				code = code * 16 + hexValue(this.source[this.index++]);
-			} else {
+			else {
 				return null;
 			}
 		}
 		return String.fromCharCode(code);
 	}
 
-	private scanUnicodeCodePointEscape(): string {
-		let ch = this.source[this.index];
-		let code = 0;
+	scanIdentifier(): RawToken | null {
+		let pos = this.getPosition();
 
-		// At least, one hex digit is required.
-		if (ch === '}') {
-			this.throwUnexpectedToken();
+		let ch = this.next();
+
+		if(!Character.isIdentifierStart(ch)) {
+			return null;
 		}
 
-		while (!this.eof()) {
-			ch = this.source[this.index++];
-			if (!Character.isHexDigit(ch.charCodeAt(0))) {
+		do {
+			if(!Character.isIdentifierPart(this.consume())) {
 				break;
 			}
-			code = code * 16 + hexValue(ch);
-		}
+		} while(!this.eof());
 
-		if (code > 0x10FFFF || ch !== '}') {
-			this.throwUnexpectedToken();
-		}
+		let
+			id = this.source.slice(pos.start, this.index),
+			type: Token;
 
-		return Character.fromCodePoint(code);
-	}
-
-	private getIdentifier(): string {
-		const start = this.index++;
-		while (!this.eof()) {
-			const ch = this.source.charCodeAt(this.index);
-			if (ch === 0x5C) {
-				// Blackslash (U+005C) marks Unicode escape sequence.
-				this.index = start;
-				return this.getComplexIdentifier();
-			} else if (ch >= 0xD800 && ch < 0xDFFF) {
-				// Need to handle surrogate pairs.
-				this.index = start;
-				return this.getComplexIdentifier();
-			}
-			if (Character.isIdentifierPart(ch)) {
-				++this.index;
-			} else {
-				break;
-			}
-		}
-
-		return this.source.slice(start, this.index);
-	}
-
-	private getComplexIdentifier(): string {
-		let cp = this.codePointAt(this.index);
-		let id = Character.fromCodePoint(cp);
-		this.index += id.length;
-
-		// '\u' (U+005C, U+0075) denotes an escaped character.
-		let ch;
-		if (cp === 0x5C) {
-			if (this.source.charCodeAt(this.index) !== 0x75) {
-				this.throwUnexpectedToken();
-			}
-			++this.index;
-			if (this.source[this.index] === '{') {
-				++this.index;
-				ch = this.scanUnicodeCodePointEscape();
-			} else {
-				ch = this.scanHexEscape('u');
-				if (ch === null || ch === '\\' || !Character.isIdentifierStart(ch.charCodeAt(0))) {
-					this.throwUnexpectedToken();
-				}
-			}
-			id = ch;
-		}
-
-		while (!this.eof()) {
-			cp = this.codePointAt(this.index);
-			if (!Character.isIdentifierPart(cp)) {
-				break;
-			}
-			ch = Character.fromCodePoint(cp);
-			id += ch;
-			this.index += ch.length;
-
-			// '\u' (U+005C, U+0075) denotes an escaped character.
-			if (cp === 0x5C) {
-				id = id.substr(0, id.length - 1);
-				if (this.source.charCodeAt(this.index) !== 0x75) {
-					this.throwUnexpectedToken();
-				}
-				++this.index;
-				if (this.source[this.index] === '{') {
-					++this.index;
-					ch = this.scanUnicodeCodePointEscape();
-				} else {
-					ch = this.scanHexEscape('u');
-					if (ch === null || ch === '\\' || !Character.isIdentifierPart(ch.charCodeAt(0))) {
-						this.throwUnexpectedToken();
-					}
-				}
-				id += ch;
-			}
-		}
-
-		return id;
-	}
-
-	// https://tc39.github.io/ecma262/#sec-names-and-keywords
-
-	private scanIdentifier(): RawToken {
-		let type: Token;
-		const start = this.index;
-
-		// Backslash (U+005C) starts an escaped character.
-		const id = (this.source.charCodeAt(start) === 0x5C) ? this.getComplexIdentifier() : this.getIdentifier();
-
-		// There is no keyword or literal with only one character.
-		// Thus, it must be an identifier.
-		if (id.length === 1) {
-			type = Token.Identifier;
-		} else if (this.isKeyword(id)) {
+		if(this.isKeyword(id)) {
 			type = Token.Keyword;
-		} else if (id === 'nil') {
-			type = Token.NullLiteral;
-		} else if (id === 'true' || id === 'false') {
+		}
+		else if(id === 'nil') {
+			type = Token.NilLiteral;
+		}
+		else if(id === 'true' || id === 'false') {
 			type = Token.BooleanLiteral;
-		} else {
+		}
+		else {
 			type = Token.Identifier;
 		}
 
-		if (type !== Token.Identifier && (start + id.length !== this.index)) {
-			const restore = this.index;
-			this.index = start;
-			this.tolerateUnexpectedToken(Messages.InvalidEscapedReservedWord);
-			this.index = restore;
-		}
+		pos.end = this.index;
 
 		return {
 			type: type,
 			value: id,
-			lineNumber: this.lineNumber,
-			lineStart: this.lineStart,
-			start: start,
-			end: this.index
+			pos: pos
 		};
 	}
 
-	// https://tc39.github.io/ecma262/#sec-punctuators
+	scanPunctuator3(str: string): string {
+		switch(str) {
+			case ">>>":
+			case "!!!":
+			case "...":
+				return str;
+			
+			default: return "";
+		}
+	}
 
-	private scanPunctuator(): RawToken {
-		const start = this.index;
+	scanPunctuator2(str: string): string {
+		str = str.substr(0, 2);
 
-		// Check for most common single-character punctuators.
-		let str = this.source[this.index];
-		switch (str) {
-			case '.':
-				++this.index;
-				if (this.source[this.index] === '.' && this.source[this.index + 1] === '.') {
-					// Spread operator: ...
-					this.index += 2;
-					str = '...';
-				}
-				break;
+		switch(str) {
+			case "++": case "--":
+			
+			case "**": case "//": case "%%":
+			
+			case "==": case "!=":
+			case "<=": case ">=":
+			case "&&": case "||":
+			
+			case "&&": case "||":
+			case "<<": case ">>":
+			
+			case "|>":
+				return str;
+		}
 
-			case '(': case ")":
-			case '[': case ']':
-			case "{": case "}":
-			case ',': case "?":
+		return "";
+	}
+
+	scanPunctuator1(str: string): string {
+		switch(str[0]) {
+			case "+": case "-":
+			case "*": case "/": case "%":
+			
+			case "<": case ">":
+			
+			case '.': case ',':
+			case "!": case "?":
 			case ';': case ":":
-				++this.index;
-				break;
 
-			default:
-				// 4-character punctuator.
-				str = this.source.substr(this.index, 4);
-				if (str === '>>>=') {
-					this.index += 4;
-					break;
-				}
+			case "@":
+			case "&": case "|":
+			case "~": case "^":
 
-				// 3-character punctuators.
-				str = str.substr(0, 3);
-				if (str === '>>>' ||
-					str === '<<=' || str === '>>=' || str === '**=' || str === '!!!') {
-					this.index += 3;
-					break;
-				}
-
-				// 2-character punctuators.
-				str = str.substr(0, 2);
-				if (str === '&&' || str === '||' || str === '==' || str === '!=' ||
-					str === '+=' || str === '-=' || str === '*=' || str === '/=' ||
-					str === '++' || str === '--' || str === '<<' || str === '>>' ||
-					str === '&=' || str === '|=' || str === '^=' || str === '%=' ||
-					str === '<=' || str === '>=' || str === '=>' || str === '**') {
-					this.index += 2;
-					break;
-				}
-
-				// 1-character punctuators.
-				str = this.source[this.index];
-				if ('@<>=!?+-*%&|^/'.indexOf(str) != -1) {
-					++this.index;
-				}
-
-				break;
+			case "=": case "$":
+				return str[0];
 		}
+		return "";
+	}
 
-		if (this.index === start) {
-			this.throwUnexpectedToken();
+	scanPunctuator(): RawToken | null {
+		let
+			pos = this.getPosition(),
+			str = this.source.substr(this.index, 3),
+			pun = "";
+
+		if(pun = this.scanPunctuator3(str)) {
+			this.index += 3;
+			this.col += 3;
 		}
+		else if(pun = this.scanPunctuator2(str)) {
+			this.index += 2;
+			this.col += 2;
+		}
+		else if(pun = this.scanPunctuator1(str)) {
+			++this.index;
+			++this.col;
+		}
+		else {
+			return null;
+		}
+		
+		// Reset lookahead so consume can recalculate
+		this.lookahead = this.source[this.index];
 
 		return {
 			type: Token.Punctuator,
-			value: str,
-			lineNumber: this.lineNumber,
-			lineStart: this.lineStart,
-			start: start,
-			end: this.index
+			value: pun,
+			pos: pos
 		};
 	}
 
-	// https://tc39.github.io/ecma262/#sec-literals-numeric-literals
-
-	private scanHexLiteral(start: number): RawToken {
+	scanBase(ch: string, base: number): RawToken | null {
 		let num = '';
 
-		while (!this.eof()) {
-			let ch = this.source.charCodeAt(this.index);
+		if(this.next().toLowerCase() != ch) {
+			return null;
+		}
 
-			if (this.scanComments()) {
+		do {
+			let ch = this.consume();
+
+			if(this.scanComments()) {
 				continue;
 			}
-			else if (!Character.isHexDigit(this.source.charCodeAt(this.index))) {
+			else if(Character.isBase(ch, base)) {
+				num += ch;
+			}
+			else {
 				break;
 			}
 
-			num += this.source[this.index++];
-		}
+		} while(!this.eof());
 
-		if (num.length === 0) {
-			this.throwUnexpectedToken();
-		}
-
-		if (Character.isIdentifierStart(this.source.charCodeAt(this.index))) {
-			this.throwUnexpectedToken();
+		if(num.length === 0) {
+			throw this.scanError("No number follows 0" + ch);
 		}
 
 		return {
 			type: Token.NumericLiteral,
-			value: parseInt('0x' + num, 16),
-			lineNumber: this.lineNumber,
-			lineStart: this.lineStart,
-			start: start,
-			end: this.index
+			value: parseInt(num, base)
 		};
 	}
 
-	private scanBinaryLiteral(start: number): RawToken {
-		let num = '';
-		let ch;
+	scanDecimalLiteral(ch: string): RawToken {
+		let num = '', dot = false, pos = this.getPosition();
 
-		while (!this.eof()) {
-			ch = this.source.charCodeAt(this.index);
-
-			if (this.scanComments()) {
-				continue;
-			}
-			// 0x30 == '0', 0x31 == '1'
-			else if (ch !== 0x30 && ch !== 0x31) {
-				break;
+		while(!this.eof() && Character.isDecimalDigit(ch)) {
+			if(ch == '.') {
+				if(dot) break;
+				dot = true;
 			}
 
-			num += this.source[this.index++];
+			num += ch;
+			ch = this.consume();
 		}
 
-		if (num.length === 0) {
-			// only 0b or 0B
-			this.throwUnexpectedToken();
-		}
-
-		if (!this.eof()) {
-			ch = this.source.charCodeAt(this.index);
-			/* istanbul ignore else */
-			if (Character.isIdentifierStart(ch) || Character.isDecimalDigit(ch)) {
-				this.throwUnexpectedToken();
-			}
-		}
-
-		return {
-			type: Token.NumericLiteral,
-			value: parseInt(num, 2),
-			lineNumber: this.lineNumber,
-			lineStart: this.lineStart,
-			start: start,
-			end: this.index
-		};
-	}
-
-	private scanOctalLiteral(prefix: string, start: number): RawToken {
-		let num = '';
-		let octal = false;
-
-		if (Character.isOctalDigit(prefix.charCodeAt(0))) {
-			octal = true;
-			num = '0' + this.source[this.index++];
-		} else {
-			++this.index;
-		}
-
-		while (!this.eof()) {
-			let ch = this.source.charCodeAt(this.index);
-			if (this.scanComments()) {
-				continue;
-			}
-			else if (!Character.isOctalDigit(ch)) {
-				break;
-			}
-
-			num += this.source[this.index++];
-		}
-
-		if (!octal && num.length === 0) {
-			// only 0o or 0O
-			this.throwUnexpectedToken();
-		}
-
-		if (Character.isIdentifierStart(this.source.charCodeAt(this.index)) || Character.isDecimalDigit(this.source.charCodeAt(this.index))) {
-			this.throwUnexpectedToken();
-		}
-
-		return {
-			type: Token.NumericLiteral,
-			value: parseInt(num, 8),
-			octal: octal,
-			lineNumber: this.lineNumber,
-			lineStart: this.lineStart,
-			start: start,
-			end: this.index
-		};
-	}
-
-	private scanNumericLiteral(): RawToken {
-		const start = this.index;
-		let ch = this.source[start];
-		assert(Character.isDecimalDigit(ch.charCodeAt(0)) || (ch === '.'),
-			'Numeric literal must start with a decimal digit or a decimal point');
-
-		let num = '', space = false;
-		if (ch !== '.') {
-			num = this.source[this.index++];
-
-			// Hex number starts with '0x'.
-			// Octal number in ES6 starts with '0o'.
-			// Binary number in ES6 starts with '0b'.
-			if (num === '0') {
-				space = this.scanComments();
-				ch = this.source[this.index];
-				if (ch === 'x' || ch === 'X') {
-					++this.index;
-					return this.scanHexLiteral(start);
-				}
-				if (ch === 'b' || ch === 'B') {
-					++this.index;
-					return this.scanBinaryLiteral(start);
-				}
-				if (ch === 'o' || ch === 'O') {
-					return this.scanOctalLiteral(ch, start);
-				}
-			}
-
-			while (!this.eof()) {
-				if (this.scanComments()) {
-					space = true;
-					continue;
-				}
-				else if (!Character.isDecimalDigit(this.source.charCodeAt(this.index))) {
-					break;
-				}
-
-				num += this.source[this.index++];
-				space = false;
-			}
-			ch = this.source[this.index];
-		}
-
-		if (ch === '.') {
-			num += this.source[this.index++];
-			while (Character.isDecimalDigit(this.source.charCodeAt(this.index))) {
-				num += this.source[this.index++];
-			}
-			ch = this.source[this.index];
-		}
-
-		if (!space && Character.isIdentifierStart(this.source.charCodeAt(this.index))) {
-			this.throwUnexpectedToken();
-		}
+		pos.end = this.index;
 
 		return {
 			type: Token.NumericLiteral,
 			value: parseFloat(num),
-			lineNumber: this.lineNumber,
-			lineStart: this.lineStart,
-			start: start,
-			end: this.index
+			pos: pos
 		};
 	}
 
-	// https://tc39.github.io/ecma262/#sec-literals-string-literals
+	scanNumericLiteral(): RawToken | null {
+		let ch = this.next();
+		if(!Character.isDecimalDigit(ch)) {
+			return null;
+		}
 
-	private scanStringLiteral(): RawToken {
-		const start = this.index;
-		let quote = this.source[start];
-		assert((quote === '\'' || quote === '"' || quote === '`'),
-			'String literal must starts with a quote');
+		if(ch === '0') {
+			let pos = this.getPosition();
 
-		++this.index;
-		let octal = false;
-		let str = '';
+			this.consume();
 
-		while (!this.eof()) {
-			let ch = this.source[this.index++];
-
-			// End quote
-			if (ch === quote) {
-				this.scanComments();
-				ch = this.source[this.index + 1];
-
-				// Concatenate adjacent string literals
-				if (ch === "'" || ch === '"' || ch === '`') {
-					++this.index;
-					quote = ch;
-					continue;
-				}
-				else {
-					quote = '';
-					break;
-				}
-			} else if (ch === '\\') {
-				ch = this.source[this.index++];
-				if (!ch || !Character.isLineTerminator(ch.charCodeAt(0))) {
-					switch (ch) {
-						case 'u':
-							if (this.source[this.index] === '{') {
-								++this.index;
-								str += this.scanUnicodeCodePointEscape();
-							} else {
-								const unescaped = this.scanHexEscape(ch);
-								if (unescaped === null) {
-									this.throwUnexpectedToken();
-								}
-								str += unescaped;
-							}
-							break;
-						case 'x':
-							const unescaped = this.scanHexEscape(ch);
-							if (unescaped === null) {
-								this.throwUnexpectedToken(Messages.InvalidHexEscapeSequence);
-							}
-							str += unescaped;
-							break;
-						case 'a':
-						case "G":
-							str += '\x07';
-							break;
-						case 'e':
-						case '[':
-							str += '\x1b';
-							break;
-						case 'n':
-						case "J":
-							str += '\n';
-							break;
-						case 'r':
-						case "M":
-							str += '\r';
-							break;
-						case 't':
-						case "I":
-							str += '\t';
-							break;
-						case 'b':
-						case "H":
-							str += '\b';
-							break;
-						case 'f':
-						case "L":
-							str += '\f';
-							break;
-						case 'v':
-						case "K":
-							str += '\x0B';
-							break;
-						case '8':
-						case '9':
-							str += ch;
-							this.tolerateUnexpectedToken();
-							break;
-
-						// Extra escapes not normally included
-						case "@": // NUL
-							str += '\x00';
-							break;
-						case "A": // SOH
-							str += '\x01';
-							break;
-						case "B": // STX
-							str += '\x02';
-							break;
-						case "C": // ETX
-							str += '\x03';
-							break;
-						case "D": // EOT
-							str += '\x04';
-							break;
-						case "E": // ENQ
-							str += '\x05';
-							break;
-						case "F": // ACK
-							str += '\x06';
-							break;
-						// G, H, I, J, K, L, M handled above
-						case "N": // Shift Out
-							str += '\x0e';
-							break;
-						case "O": // Shift In
-							str += '\x0f';
-							break;
-						case "P": // DLE
-							str += '\x10'
-							break;
-						case "Q": // DC1
-							str += '\x11';
-							break;
-						case "R": // DC2
-							str += '\x12';
-							break;
-						case "S": // DC3
-							str += '\x13';
-							break;
-						case "T": // DC4
-							str += '\x14';
-							break;
-						case "U": // NAK
-							str += '\x15';
-							break;
-						case "V": // SYN
-							str += '\x16';
-							break;
-						case "W": // ETB
-							str += '\x17';
-							break;
-						case "X": // CAN
-							str += '\x18';
-							break;
-						case "Y": // End of Medium
-							str += '\x19';
-							break;
-						case "Z": // SUB
-							str += '\x1a';
-							break;
-						// Got [
-						case '|': // File Separator
-							// Traditionally this is ^\, which would
-							//  translate to \\, but that's taken
-							str += '\x1c';
-							break;
-						case ']': // Group Separator
-							str += '\x1d';
-							break;
-						case "^": // Record Separator
-							str += '\x1e';
-							break;
-						case "_": // Unit Separator
-							str += '\x1f';
-							break;
-						case "?":
-							str += '\x7f';
-							break;
-
-						default:
-							str += ch;
-							break;
-					}
-				} else {
-					++this.lineNumber;
-					if (ch === '\r' && this.source[this.index] === '\n') {
-						++this.index;
-					}
-					this.lineStart = this.index;
-				}
-			} else if (Character.isLineTerminator(ch.charCodeAt(0))) {
-				str += '\n';
-			} else {
-				str += ch;
+			let tok =
+				this.scanBase('x', 16) ||
+				this.scanBase('o', 8) ||
+				this.scanBase('b', 2);
+			if(tok) {
+				tok.pos = pos;
+				return tok;
 			}
 		}
 
-		if (quote !== '') {
-			this.index = start;
-			this.throwUnexpectedToken();
+		return this.scanDecimalLiteral(ch);
+	}
+
+	scanStringLiteral(): RawToken | null {
+		let pos = this.getPosition();
+		let quote = this.next();
+		if(!Character.isQuote(quote)) {
+			return null;
 		}
+
+		let str = '';
+
+		while(!this.eof()) {
+			let ch = this.consume();
+
+			if(ch === '\\') {
+				ch = this.consume();
+				if(ch === 'x') {
+					let x = this.scanHexEscape(2);
+					if(x) {
+						str += x;
+					}
+					else {
+						break;
+					}
+				}
+				else if(Character.isNewline(ch)) {
+					str += '\n';
+				}
+				else {
+					str += {
+						'a': '\x07',
+						'n': '\n',
+						'r': '\r',
+						't': '\t',
+						'f': '\f',
+						'v': '\v'
+					}[ch] || ch;
+				}
+			}
+			else if(Character.isNewline(ch)) {
+				str += '\n';
+			}
+			else {
+				str += ch;
+			}
+		}
+		
+		if(this.eof()) {
+			throw this.scanError("EOF while parsing string");
+		}
+
+		pos.end = this.index;
 
 		return {
 			type: Token.StringLiteral,
 			value: str,
-			octal: octal,
-			lineNumber: this.lineNumber,
-			lineStart: this.lineStart,
-			start: start,
-			end: this.index
+			pos: pos
 		};
 	}
 
 	public lex(): RawToken {
-		if (this.eof()) {
+		if(this.eof()) {
 			return {
 				type: Token.EOF,
-				value: '',
-				lineNumber: this.lineNumber,
-				lineStart: this.lineStart,
-				start: this.index,
-				end: this.index
+				value: ''
 			};
 		}
 
 		this.scanComments();
 
-		const cp = this.source.charCodeAt(this.index);
+		let tok = (
+			this.scanIdentifier() ||
+			this.scanGroup() ||
+			this.scanStringLiteral() ||
+			this.scanNumericLiteral() ||
+			this.scanPunctuator()
+		);
 
-		if (Character.isIdentifierStart(cp)) {
-			return this.scanIdentifier();
+		if(tok === null) {
+			throw this.scanError("Unknown token");
 		}
-
-		// Very common: ( and ) and ;
-		if (cp === 0x28 || cp === 0x29 || cp === 0x3B) {
-			return this.scanPunctuator();
-		}
-
-		// String literal starts with single quote (U+0027) or double quote (U+0022) or a backtick (U+0060)
-		if (cp === 0x27 || cp === 0x22 || cp === 0x60) {
-			return this.scanStringLiteral();
-		}
-
-		// Dot (.) U+002E can also start a floating-point number, hence the need
-		// to check the next character.
-		if (cp === 0x2E) {
-			if (Character.isDecimalDigit(this.source.charCodeAt(this.index + 1))) {
-				return this.scanNumericLiteral();
-			}
-			return this.scanPunctuator();
-		}
-
-		if (Character.isDecimalDigit(cp)) {
-			return this.scanNumericLiteral();
-		}
-
-		// Possible identifier start in a surrogate pair.
-		if (cp >= 0xD800 && cp < 0xDFFF) {
-			if (Character.isIdentifierStart(this.codePointAt(this.index))) {
-				return this.scanIdentifier();
-			}
-		}
-
-		return this.scanPunctuator();
+		return tok;
 	}
-
 }

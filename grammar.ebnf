@@ -1,0 +1,82 @@
+(* Literals *)
+	nil = "nil";
+	bool = "true" | "false";
+	int = digit, int;
+	real = {digit}, [".", {digit}] | [{digit}, "."], {digit};
+	string = ["r"], <'"`>, ..., <'"`>;
+
+	entry = (ident | expression), [":", expression];
+	object = "$", <([{>, [entry, {",", entry}], <)]}>;
+
+	literal = nil | bool | int | real | string | object;
+
+(* Operators *)
+	unary = "-" | "+" | "@" | "~" | "!" | "++" | "--" | "!!!";
+	unary keyword = "not"
+	
+	compare = ("<" | ">" | "!" | "=") + "=";
+	doubly = "*" | "/" | "%" | "&" | "|" | "^" | ":" | "=";
+	binary keyword = "and" | "or" | "proto" | "is" ["proto"] | "in";
+	binary = "-" | "+" | compare | binary keyword | doubly | doubly + doubly;
+	inplace = binary, "=";
+
+	punct = unary | unary keyword | binary | inplace;
+
+keyword = ...;
+
+ident = ~(space | int | real | punct | keyword), [ident];
+
+as = "as", ident;
+
+(* Blocks *)
+	if = "if", [as], group, ["then"], expression, [else];
+	else = "else", [as], expression;
+	
+	catch = "catch", [as], <([{>, ident, >)]}>, expression;
+	try = "try", [as], expression, [catch | else];
+
+	do = "do", [as], expression, "while", group, [else];
+	while = "while", [as], group, expression, [else];
+	for = "for", [as], <([{>, ["var"], ident, "in", expression, <)]}>;
+
+	case = "case", group, <([{>, {when}, <)]}>;
+	when = "when", group, expression | "else", expression;
+
+	block = if | try | do | while | for | when;
+
+(* Control *)
+	return = "return", expression;
+
+	using = "using", expression;
+
+	break = "break", [name], [using];
+	continue = "continue", [name], [using];
+	redo = "redo", [name], [using];
+
+	control = return | break | continue | redo;
+
+(* Declarations *)
+	assignment = ident, "=", expression;
+	binding = ident | assignment;
+
+	var = "var", binding, [{",", binding}];
+	def = "def", assignment, [{",", assignment}];
+
+	param = ident, ["=", expression];
+	parameters = <([{>, [param, [{",", param}]], <)]}>;
+	let = "let", [ident], parameters, expression;
+	
+	declaration = var | def | let;
+
+(* Misc *)
+	call args = <([{>, [expression, [{",", expression}]], <)]}>;
+	call = expression, call args;
+	new = "new", expression, [call args];
+	
+	misc = call | new;
+
+statement = block | control | declaration;
+
+subexpression = literal | ident | statement | unary, subexpression | subexpression, binary, expression;
+
+expression = subexpression, [{";", [subexpression]}];

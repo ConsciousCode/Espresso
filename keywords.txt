@@ -9,7 +9,7 @@ var def
 let use
 and or not
 is in
-as
+as using
 case when
 break continue redo
 return yield

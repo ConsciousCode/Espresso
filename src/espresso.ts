@@ -23,23 +23,26 @@
 */
 
 import { Parser } from './parser';
-import { Tokenizer } from './tokenizer';
+import { Token } from './token';
+import { Scanner } from './scanner';
 
 export function parse(code: string) {
 	return new Parser(code).parseScript();
 }
 
 export function tokenize(code: string) {
-	const tokenizer = new Tokenizer(code, {});
+	const scanner = new Scanner(code);
 
-	let tokens: any = [], token: any;
+	let tokens: any = [];
 
-	while (token = tokenizer.getNextToken()) {
-		tokens.push(token);
+	for(;;) {
+		let tok = scanner.lex();
+		if(tok.type === Token.EOF) {
+			break;
+		}
+		
+		tokens.push(tok);
 	}
-
+	
 	return tokens;
 }
-
-// Sync with *.json manifests.
-export const version = '4.0.0-dev';

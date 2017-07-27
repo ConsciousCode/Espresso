@@ -17,43 +17,43 @@ var UNARYOPS = {
  * Binary operation precedences.
 )#
 var BINARYOPS = {
-	#    ')': 0,
-	# Technical
-	';': 0x00,
+#    ')': 0,
+# Technical
+';': 0x00,
 	',': 0x01,
-	'=': 0x01,
-	#    ']': 0,
+		'=': 0x01,
+#    ']': 0,
 
-	# Boolean
-	'||': 0x10, 'or': 0x10,
+# Boolean
+'||': 0x10, 'or': 0x10,
 	'&&': 0x11, 'and': 0x11,
 
-	# Comparisons
-	'in': 0x20, 'is': 0x20,
+# Comparisons
+'in': 0x20, 'is': 0x20,
 	"<": 0x20, "<=": 0x20,
-	">": 0x20, ">=": 0x20,
-	"==": 0x20, "!=": 0x20,
+		">": 0x20, ">=": 0x20,
+			"==": 0x20, "!=": 0x20,
 
-	# Arithmetic
-	'+': 0x30, '-': 0x30,
+# Arithmetic
+'+': 0x30, '-': 0x30,
 	'*': 0x31, '/': 0x31, '%': 0x31,
 
-	# (Unary ops)
+# (Unary ops)
 
-	# Bitwise
-	'|': 0x50,
+# Bitwise
+'|': 0x50,
 	'^': 0x51,
-	'&': 0x52,
-	'<<': 0x53,
-	'>>': 0x53,
-	'>>>': 0x53,
+		'&': 0x52,
+			'<<': 0x53,
+				'>>': 0x53,
+					'>>>': 0x53,
 
-	# Referencing
-	"::": 0xa0, '.': 0xa1
+# Referencing
+"::": 0xa0, '.': 0xa1
 };
 
 #(
- * Operations that are right-associating
+ * Operations that are right- associating
 )#
 var RIGHTOPS = [';'];
 
@@ -63,262 +63,262 @@ export proto Parser {
 	let new(code) {
 		this.scanner = new Scanner(code);
 	}
-	
+
 	let match(type, value) {
 		var tok = this.nextToken();
-		if(tok.type == type and tok.value == value) {
+		if (tok.type == type and tok.value == value) then {
 			this.consumeToken();
 			return true;
 		}
 		return false;
 	}
-	
+
 	let matchPunctuator(value) {
 		return this.match(Token.Punctuator, value);
 	}
-	
+
 	let matchKeyword(value) {
 		return this.match(Token.Keyword, value);
 	}
-	
+
 	let parseFunction() {
 		var name, body;
-		
+
 		var tok = this.nextToken();
-		if(tok.type == Token.Identifier) {
+		if (tok.type == Token.Identifier) then {
 			name = tok.value;
 			tok = this.consumeToken();
 		}
-		
-		if(tok.value != "(") {
+
+		if (tok.value != "(") {
 			fail "Expected (";
 		}
 		tok = this.consumeToken();
-		
+
 		var params = new List(
-			do while(tok.value and tok.value != ")") {
-				if(tok.type == Token.Identifier) {
-					yield new Node.Identifier(tok.value);
-				
-					tok = this.consumeToken();
-					if(tok.value != ")") {
-						this.expectPunctuator(",");
-					}
+			exec while(tok.value and tok.value != ")") {
+			if (tok.type == Token.Identifier) then {
+				yield new Node.Identifier(tok.value);
+
+				tok = this.consumeToken();
+				if (tok.value != ")") {
+					this.expectPunctuator(",");
 				}
 			}
+		}
 		);
-		
-		return new Node.Function(name, params, body);
-	}
-	
-	let parseIf() {
-		var test = this.parseExpression(COMPACT);
-		if(this.nextToken().value == "then") {
-			this.consumeToken();
-		}
 
-		var body = this.parseExpression(COMPACT), alt = nil;
-		if(this.matchKeyword('else')) {
-			this.nextToken();
-			alt = this.parseExpression(COMPACT);
-		}
+	return new Node.Function(name, params, body);
+}
 
-		return new Node.IfExpression(test, body, alt);
-	}
-	
-	let parseDo() {
-		var body = this.parseExpression(), loop = nil;
-
-		if(this.matchKeyword('while')) {
-			this.consumeToken();
-
-			loop = this.parseWhileStatement();
-		}
-
-		return new Node.DoExpression(body, loop);
-	}
-	
-	let parseElseable() {
-		# We want to exclude semicolon chaining
-		var
-			head = this.parseExpression(COMPACT),
-			body = this.parseExpression(COMPACT),
-			alt = nil;
-
-		if(this.matchKeyword('else')) {
-			this.consumeToken();
-			alt = this.parseExpression(0);
-		}
-		
-		return {head:head, body:body, alt:alt};
-	}
-	
-	let parseWhileStatement() {
-		var { head, body, alt } = this.parseElseable();
-		return new Node.WhileStatement(head, body, alt);
-	}
-	
-	let parseForStatement() {
-		var { head, body, alt } = this.parseElseable();
-		return new Node.ForStatement(head, body, alt);
-	}
-	
-	let parseReturnStatement() {
-		return new Node.ReturnStatement(this.parseExpression(0));
-	}
-	
-	let parseWithStatement() {
-		return new Node.WithStatement(
-			this.parseExpression(COMPACT),
-			this.parseExpression(COMPACT)
-		);
-	}
-	
-	let nextToken() {
-		if(this.lookahead) {
-			return this.lookahead;
-		}
-
-		return this.consumeToken();
-	}
-	
-	let nextIdentifier() {
-		var tok = this.nextToken();
-		if(tok.type == Token.Identifier) {
-			return tok;
-		}
-
-		return nil;
-	}
-	
-	let consumeToken() {
-		return this.lookahead = this.scanner.lex();
-	}
-	
-	let parseAtom() {
-		var
-			start = this.scanner.index,
-			tok = this.nextToken(), val, op;
-
+let parseIf() {
+	var test = this.parseExpression(COMPACT);
+	if (this.nextToken().value == "then") then {
 		this.consumeToken();
+	}
+
+	var body = this.parseExpression(COMPACT), alt = nil;
+	if (this.matchKeyword('else')) then {
+		this.nextToken();
+		alt = this.parseExpression(COMPACT);
+	}
+
+	return new Node.IfExpression(test, body, alt);
+}
+
+let parseDo() {
+	var body = this.parseExpression(), loop = nil;
+
+	if (this.matchKeyword('while')) then {
+		this.consumeToken();
+
+		loop = this.parseWhileStatement();
+	}
+
+	return new Node.DoExpression(body, loop);
+}
+
+let parseElseable() {
+# We want to exclude semicolon chaining
+var
+	head = this.parseExpression(COMPACT),
+	body = this.parseExpression(COMPACT),
+	alt = nil;
+
+if (this.matchKeyword('else')) then {
+	this.consumeToken();
+	alt = this.parseExpression(0);
+}
+
+return { head: head, body: body, alt: alt };
+	}
+	
+let parseWhileStatement() {
+	use var { head, body, alt } = this.parseElseable();
+	return new Node.WhileStatement(head, body, alt);
+}
+
+let parseForStatement() {
+	use var { head, body, alt } = this.parseElseable();
+	return new Node.ForStatement(head, body, alt);
+}
+
+let parseReturnStatement() {
+	return new Node.ReturnStatement(this.parseExpression(0));
+}
+
+let parseWithStatement() {
+	return new Node.WithStatement(
+		this.parseExpression(COMPACT),
+		this.parseExpression(COMPACT)
+	);
+}
+
+let nextToken() {
+	if (this.lookahead) then {
+		return this.lookahead;
+	}
+
+	return this.consumeToken();
+}
+
+let nextIdentifier() {
+	var tok = this.nextToken();
+	if (tok.type == Token.Identifier) then {
+		return tok;
+	}
+
+	return nil;
+}
+
+let consumeToken() {
+	return this.lookahead = this.scanner.lex();
+}
+
+let parseAtom() {
+	var
+		start = this.scanner.index,
+		tok = this.nextToken(), val, op;
+
+	this.consumeToken();
 
 		case(tok.type) {
-			when Token.BooleanLiteral
-				return new Node.Literal(
-					tok.value == 'true', tok.value
-				);
-			when Token.NilLiteral
-				return new Node.Literal(nil);
-			when Token.NumericLiteral
-				return new Node.Literal(tok.value);
-			when Token.StringLiteral
-				return new Node.Literal(tok.value);
+	when Token.BooleanLiteral do
+		return new Node.Literal(
+			tok.value == 'true', tok.value
+		);
+			when Token.NilLiteral do
+		return new Node.Literal(nil);
+			when Token.NumericLiteral do
+		return new Node.Literal(tok.value);
+			when Token.StringLiteral do
+		return new Node.Literal(tok.value);
 
-			when Token.Keyword {
+			when Token.Keyword do {
 				case(tok.value) {
-					when 'if'
-						return this.parseIfStatement();
-					when 'for'
-						return this.parseForStatement();
-					when 'do'
-						return this.parseDoBlock();
-					when 'let'
-						return this.parseFunctionExpression();
-					when 'return'
-						return new Node.ReturnStatement(
-							this.parseExpression(COMPACT)
-						);
-					when 'yield' {
-						var delegate = false;
-						if(this.matchKeyword('from')) {
-							delegate = true;
-							this.consumeToken();
-						}
-
-						return new Node.YieldExpression(
-							this.parseExpression(COMPACT), delegate
-						);
-					}
-					when 'fail'
-						return new Node.FailStatement(
-							this.parseExpression(COMPACT)
-						);
-					when 'with'
-						return this.parseWithStatement();
+			when 'if' do
+				return this.parseIfStatement();
+					when 'for' do
+				return this.parseForStatement();
+					when 'do' do
+				return this.parseDoBlock();
+					when 'let' do
+				return this.parseFunctionExpression();
+					when 'return' do
+				return new Node.ReturnStatement(
+					this.parseExpression(COMPACT)
+				);
+					when 'yield' do {
+				var delegate = false;
+				if (this.matchKeyword('from')) {
+					delegate = true;
+					this.consumeToken();
 				}
+
+				return new Node.YieldExpression(
+					this.parseExpression(COMPACT), delegate
+				);
 			}
+					when 'fail' do
+				return new Node.FailStatement(
+					this.parseExpression(COMPACT)
+				);
+					when 'with' do
+				return this.parseWithStatement();
+				}
+	}
 			when Token.Punctuator {
-				# Ignore [ and { for now
+		# Ignore[and { for now
 				if(tok.value == '(') {
-					if(this.matchPunctuator(")")) {
-						var stop = this.scanner.index;
+				if (this.matchPunctuator(")")) {
+					var stop = this.scanner.index;
 
-						this.consumeToken();
-						return new Node.Literal(
-							nil, this.scanner.source.substring(
-								start, stop
-							)
-						);
-					}
-					else {
-						val = this.parseExpression(0);
-						this.expectPunctuator(")");
-						return val;
-					}
-				}
-				
-				continue;
-			}
-
-			when Token.Identifier {
-				op = UNARYOPS.?[tok.value];
-				if(op) {
-					return new Node.UnaryExpression(
-						tok.value, this.parseExpression(op)
+					this.consumeToken();
+					return new Node.Literal(
+						nil, this.scanner.source.substring(
+							start, stop
+						)
 					);
 				}
-				else if(tok.type == Token.Identifier) {
-					return new Node.Identifier(tok.value);
+				else {
+					val = this.parseExpression(0);
+					this.expectPunctuator(")");
+					return val;
 				}
-				
-				continue;
 			}
+
+			continue;
+		}
+
+		when Token.Identifier {
+			op = UNARYOPS.?[tok.value];
+			if (op) {
+				return new Node.UnaryExpression(
+					tok.value, this.parseExpression(op)
+				);
+			}
+			else if (tok.type == Token.Identifier) {
+				return new Node.Identifier(tok.value);
+			}
+
+			continue;
+		}
 			
 			else {
-				fail tok;
-			}
+			fail tok;
 		}
 	}
-	
-	let nextBinaryOperator(minprec) {
-		var tok = this.nextToken(), op = BINARYOPS.?[tok.value];
+}
+
+let nextBinaryOperator(minprec) {
+	var tok = this.nextToken(), op = BINARYOPS.?[tok.value];
 		
-		if(op is nil or op < minprec) {
-			return nil;
-		}
-
-		this.consumeToken();
-		return {
-			token: tok, prec: op,
-			leftassoc: tok.value not in RIGHTOPS
-		};
+	if (op is nil or op < minprec) {
+		return nil;
 	}
-	
-	let parseExpression(minprec) {
-		var lhs = this.parseAtom(), op;
 
-		while(op = this.nextBinaryOperator(minprec)) {
-			lhs = new Node.BinaryExpression(op.token.value,
-				lhs, this.parseExpression(op.prec + op.leftassoc)
-			);
-		}
+	this.consumeToken();
+	return {
+		token: tok, prec: op,
+		leftassoc: tok.value not in RIGHTOPS
+	};
+}
 
-		return lhs;
+let parseExpression(minprec) {
+	var lhs = this.parseAtom(), op;
+
+	while (op = this.nextBinaryOperator(minprec)) {
+		lhs = new Node.BinaryExpression(op.token.value,
+			lhs, this.parseExpression(op.prec + op.leftassoc)
+		);
 	}
-	
-	let parseScript() {
-		# Consume the default EOF token
-		this.consumeToken();
-		return this.parseExpression(0);
+
+	return lhs;
+}
+
+let parseScript() {
+# Consume the default EOF token
+this.consumeToken();
+return this.parseExpression(0);
 	}
 };

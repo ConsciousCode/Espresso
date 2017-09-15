@@ -11,6 +11,7 @@
 		"scanner.ts",
 		"nodes.ts",
 		"parser.ts",
-		"espresso.ts"
+		"espresso.ts",
+		"interpret.ts"
 	]
 }

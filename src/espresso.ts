@@ -25,9 +25,27 @@
 import { Parser } from './parser';
 import { Token } from './token';
 import { Scanner } from './scanner';
+import { Interpreter } from './interpret';
 
 export function parse(code: string) {
 	return new Parser(code).parseScript();
+}
+
+export function exec(code: string) {
+	return new Interpreter().exec(parse(code));
+}
+
+export function tokenStream(code: string) {
+	const scanner = new Scanner(code);
+
+	for(;;) {
+		let tok = scanner.lex();
+		if(tok.type === Token.EOF) {
+			break;
+		}
+		
+		console.log(tok);
+	}
 }
 
 export function tokenize(code: string) {

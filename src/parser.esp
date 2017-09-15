@@ -5,52 +5,40 @@ var Scanner = import "./scanner";
 #(
  * Unary operator precedences.
 )#
-var UNARYOPS = {
+var UNARYOPS = object(
 	"+": 0x40, '-': 0x40,
 	"~": 0x41, "!": 0x41, 'not': 0x41,
 	"++": 0x42, "--": 0x42,
 
 	"::": 0x40, "@": 0x42
-};
+);
 
 #(
  * Binary operation precedences.
 )#
-var BINARYOPS = {
-#    ')': 0,
-# Technical
-';': 0x00,
+var BINARYOPS = object(
+    # Technical
+    ';': 0x00,
 	',': 0x01,
-		'=': 0x01,
-#    ']': 0,
+	'=': 0x01,
 
-# Boolean
-'||': 0x10, 'or': 0x10,
+    # Boolean
+    '||': 0x10, 'or': 0x10,
 	'&&': 0x11, 'and': 0x11,
 
-# Comparisons
-'in': 0x20, 'is': 0x20,
+    # Comparisons
+    'in': 0x20, 'is': 0x20,
 	"<": 0x20, "<=": 0x20,
-		">": 0x20, ">=": 0x20,
-			"==": 0x20, "!=": 0x20,
+	">": 0x20, ">=": 0x20,
+	"==": 0x20, "!=": 0x20,
 
-# Arithmetic
-'+': 0x30, '-': 0x30,
+    # Arithmetic
+    '+': 0x30, '-': 0x30,
 	'*': 0x31, '/': 0x31, '%': 0x31,
 
-# (Unary ops)
-
-# Bitwise
-'|': 0x50,
-	'^': 0x51,
-		'&': 0x52,
-			'<<': 0x53,
-				'>>': 0x53,
-					'>>>': 0x53,
-
-# Referencing
-"::": 0xa0, '.': 0xa1
-};
+    # Referencing
+    "::": 0xa0, '.': 0xa1
+);
 
 #(
  * Operations that are right- associating

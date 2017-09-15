@@ -1,5 +1,6 @@
 import * as Node from './nodes';
-import { RawToken, Scanner } from './scanner';
+
+import { Position, RawToken, Scanner } from './scanner';
 import { Token, TokenName } from './token';
 import { Character } from './character';
 
@@ -15,56 +16,39 @@ interface Elseable {
 **/
 const UNARYOPS = {
 	"+": 0x40, '-': 0x40,
-	"~": 0x41, "!": 0x41, 'not': 0x41,
-	"++": 0x42, "--": 0x42,
+	"!": 0x41, 'not': 0x41,
 
-	"::": 0xa0, "@": 0xa2
+	"::": 0xa0
 };
 
 /**
  * Binary operation precedences.
 **/
 const BINARYOPS = {
-	//')': 0,
 	// Technical
 	';': 0x00,
-	":": 0x01,
-	',': 0x01,
+	//":": 0x01,
+	//',': 0x01,
 	'=': 0x01,
-	//']': 0,
 
 	// Boolean
-	'||': 0x10, 'or': 0x10,
-	'&&': 0x11, 'and': 0x11,
-
-	// Pipe operator
-	"|>": 0x12,
+	'or': 0x10,
+	'and': 0x11,
 
 	// Comparisons
-	'in': 0x20, 'is': 0x20,
 	"<": 0x20, "<=": 0x20,
 	">": 0x20, ">=": 0x20,
 	"==": 0x20, "!=": 0x20,
 
 	// Arithmetic
 	'+': 0x30, '-': 0x30,
-	'*': 0x31, '/': 0x31, '%': 0x31,
-
-	// (Unary ops)
-
-	// Bitwise
-	'|': 0x50,
-	'^': 0x51,
-	'&': 0x52,
-	'<<': 0x53,
-	'>>': 0x53,
-	'>>>': 0x53,
+	'*': 0x31, '/': 0x31,
 
 	// Groups
 	"(": 0xa0, "[": 0xa0, "{": 0xa0,
 
 	// Referencing
-	"::": 0xb0, '.': 0xb1
+	'.': 0xb1
 };
 
 /**
@@ -76,6 +60,14 @@ const COMPACT = BINARYOPS[';'] + 1, PARAMETER = BINARYOPS[','];
 
 function summarize_token(tok: RawToken): string {
 	return TokenName[tok.type] + "{" + tok.value + "}";
+}
+
+function should_ignore(t: Token) {
+	return (
+		t === Token.Whitespace ||
+		t === Token.SingleLineComment ||
+		t === Token.MultiLineComment
+	);
 }
 
 /**
@@ -106,18 +98,18 @@ export class Parser {
 	/** Error handling **/
 	//////////////////////
 
-	summarizePosition(): string {
+	summarizePosition(pos: Position): string {
 		return (
-			"(ln: " + this.scanner.line +
-			", col: " + this.scanner.col + "):" +
-			this.scanner.index
+			"(ln: " + pos.line +
+			", col: " + pos.col + "):" +
+			pos.start
 		)
 	}
 
 	unexpectedToken(tok: RawToken): Error {
 		return new Error(
 			"Unexpected " + summarize_token(tok) + " at " +
-			this.summarizePosition()
+			this.summarizePosition(tok.pos||this.scanner.getPosition())
 		);
 	}
 
@@ -126,7 +118,11 @@ export class Parser {
 	////////////////////////////
 
 	consumeToken(): RawToken {
-		return this.lookahead = this.scanner.lex();
+		// Lex until we get a substantive token
+		do {
+			var la = this.scanner.lex();
+		} while(should_ignore(la.type));
+		return this.lookahead = la;
 	}
 
 	nextToken(): RawToken {
@@ -151,7 +147,7 @@ export class Parser {
 					type, value: value || ""
 				}) +
 				", got " + summarize_token(token) +
-				" " + this.summarizePosition()
+				" " + this.summarizePosition(token.pos||this.scanner.getPosition())
 			);
 		}
 
@@ -172,7 +168,7 @@ export class Parser {
 					type, value: "<any>"
 				}) +
 				", got " + summarize_token(token) +
-				" " + this.summarizePosition()
+				" " + this.summarizePosition(token.pos||this.scanner.getPosition())
 			);
 		}
 
@@ -192,9 +188,9 @@ export class Parser {
 		}
 		return tok;
 	}
-
+	
 	/// Try to match, else return null
-
+	
 	match(type: Token, value: string): RawToken | null {
 		let tok = this.nextToken();
 		if(tok.type === type && tok.value === value) {
@@ -202,7 +198,7 @@ export class Parser {
 		}
 		return null;
 	}
-
+	
 	matchAny(type: Token): RawToken | null {
 		let tok = this.nextToken()
 		if(tok.type === type) {
@@ -210,11 +206,11 @@ export class Parser {
 		}
 		return null;
 	}
-
+	
 	matchPunctuator(value: string): RawToken | null {
 		return this.match(Token.Punctuator, value);
 	}
-
+	
 	matchKeyword(value: string): RawToken | null {
 		return this.match(Token.Keyword, value);
 	}
@@ -223,21 +219,14 @@ export class Parser {
 	/** Clause parsing **/
 	//////////////////////
 	
-	readAsClause(): Node.AsClause|null {
-		if(this.matchKeyword('as')) {
-			this.consumeToken();
-			
-			return new Node.AsClause(new Node.Identifier(this.expectIdentifier()));
-		}
-		
-		return null;
+	parseElseClause(): Node.ElseClause {
+		return new Node.ElseClause(this.parseStatement());
 	}
 	
 	readElseClause(): Node.ElseClause|null {
 		if(this.matchKeyword('else')) {
 			this.consumeToken();
-			let asc = this.readAsClause();
-			return new Node.ElseClause(asc, this.parseStatement());
+			return this.parseElseClause();
 		}
 		
 		return null;
@@ -247,28 +236,25 @@ export class Parser {
 	/** Atom parsing **/
 	////////////////////
 
-	/**
-	 * This parses any non-object literal of the form
-	 *  (...) [...] or {...}, as these are all the same
-	 *  in Espresso.
-	**/
-	parseGroup(end: string): Node.Expression {
+	parseGroup(open: string): Node.Expression {
 		let clauses: (Node.Expression | null)[] = [];
+		const close = Character.toGroupClose(open);
 		for(;;) {
 			// Allow consecutive semicolons
 			while(this.matchPunctuator(';')) {
 				this.consumeToken();
 				clauses.push(null);
 			}
-
-			if(this.matchPunctuator(end)) {
+			
+			if(this.match(Token.GroupClose, close)) {
+				this.consumeToken();
 				break;
 			}
 
-			clauses.push(this.parseExpression(COMPACT));
+			clauses.push(this.parseStatement());
 		}
 
-		// () [] or {}
+		// () == nil
 		if(clauses.length == 0) {
 			return new Node.Literal(null);
 		}
@@ -284,7 +270,8 @@ export class Parser {
 	expectGroup(): Node.Expression {
 		let tok = this.nextToken();
 		if(tok.type === Token.GroupOpen) {
-			return this.parseGroup(Character.toGroupClose(tok.value as string));
+			this.consumeToken();
+			return this.parseGroup(tok.value);
 		}
 		
 		throw this.unexpectedToken(tok);
@@ -295,11 +282,11 @@ export class Parser {
 	**/
 	readParamDefs(): Node.FunctionParameter[] {
 		let params: Node.FunctionParameter[] = [];
-		let start = this.nextToken();
-
-		const END = Character.toGroupClose(start);
-
-		while(!this.matchPunctuator(END)) {
+		let start = this.expectAny(Token.GroupOpen);
+		
+		const END = Character.toGroupClose(start.value);
+		
+		while(!this.match(Token.GroupClose, END)) {
 			let
 				name = this.expectAny(Token.Identifier),
 				def: Node.Expression | null = null;
@@ -307,11 +294,11 @@ export class Parser {
 			if(this.matchPunctuator('=')) {
 				this.consumeToken();
 
-				def = this.parseExpression(0);
+				def = this.parseStatement();
 			}
 
 			params.push(new Node.FunctionParameter(
-				new Node.Identifier(name.value as string), def
+				new Node.Identifier(name.value), def
 			));
 
 			if(!this.matchPunctuator(',')) {
@@ -321,45 +308,56 @@ export class Parser {
 			this.consumeToken();
 		}
 
-		this.expectPunctuator(END);
-
+		this.expect(Token.GroupClose, END);
+		
 		return params;
+	}
+	
+	parseParam(): Node.CallParameter {
+		let a: Node.Expression = this.parseStatement();
+		
+		if(this.matchPunctuator(":")) {
+			this.consumeToken();
+			if(a instanceof Node.Identifier) {
+				a = new Node.Literal(a.name);
+			}
+			
+			return new Node.CallParameter(a, this.parseStatement());
+		}
+		else {
+			return new Node.CallParameter(null, a);
+		}
 	}
 
 	/**
 	 * Parse the parameters being provided to a function call
 	**/
-	readParams(): Node.Expression[] {
-		let
-			args: Node.Expression[] = [],
-			tok = this.nextToken();
+	parseParameters(open: string): Node.CallParameter[] {
+		let args: Node.CallParameter[] = [];
 
-		const END = Character.toGroupClose(tok.value as string);
-
-		if(this.matchPunctuator(END)) {
+		const END = Character.toGroupClose(open);
+		
+		if(this.match(Token.GroupClose, END)) {
 			this.consumeToken();
 			return [];
 		}
 		
 		for(;;) {
-			args.push(this.parseStatement());
+			let p = this.parseParam();
+			console.log(p);
+			args.push(p);
 			
-			if(!this.matchPunctuator(',')) {
+			if(this.matchPunctuator(',')) {
 				this.consumeToken();
+			}
+			else {
 				break;
 			}
 		}
-
-		this.expectPunctuator(END);
-
+		
+		this.expect(Token.GroupClose, END);
+		
 		return args;
-	}
-
-	parseNew() {
-		return new Node.NewExpression(
-			this.parseStatement(),
-			this.readParams()
-		);
 	}
 
 	/**
@@ -375,31 +373,31 @@ export class Parser {
 		
 		this.consumeToken();
 
-		return new Node.Identifier(tok.value as string);
+		return new Node.Identifier(tok.value);
 	}
 
 	parseFunctionExpression(): Node.FunctionExpression {
 		return new Node.FunctionExpression(
 			this.parseFunctionName(),
 			this.readParamDefs(),
-			this.parseExpression(0)
+			this.parseStatement()
 		);
 	}
 
 	parseIfExpression(): Node.IfChain {
-		let clauses: Node.IfClause[] = [], alt: Node.ElseClause|null = null;
+		let clauses: Node.IfClause[] = [];
 		
-		do {
-			// Assumption: nextToken is after 'if'
-			let asc = this.readAsClause();
-			
+		for(;;) {
+			let g = this.expectGroup();
+			let s = this.parseStatement();
 			clauses.push(
-				new Node.IfClause(
-					asc,
+				new Node.IfClause(g, s));
+				/*
 					this.expectGroup(),
-					this.parseExpression(0)
+					this.parseStatement()
 				)
 			);
+			*/
 
 			// This is fairly complicated, so I put it in a block of its own rather
 			//  than in the while test
@@ -410,65 +408,15 @@ export class Parser {
 					continue;
 				}
 				else {
-					alt = this.readElseClause();
-					break;
+					return new Node.IfChain(clauses, this.parseElseClause());
 				}
-			}
-		} while(0);
-
-		return new Node.IfChain(clauses, alt);
-	}
-
-	parseProto(): Node.Prototype {
-		let name = "", tok = this.nextToken();
-		if(tok.type === Token.Identifier) {
-			name = tok.value as string;
-			this.consumeToken();
-		}
-
-		return new Node.Prototype(
-			name? new Node.Identifier(name) : null,
-			this.parseStatement()
-		);
-	}
-
-	parseImportExpression(): Node.Import {
-		return new Node.Import(this.parseStatement());
-	}
-
-	parseExportExpression(): Node.Export {
-		return new Node.Export(
-			this.readAsClause(),
-			this.parseStatement()
-		);
-	}
-
-	parseCaseExpression(): Node.SwitchExpression {
-		let value = this.parseExpression(0), when: Node.SwitchCase[] = [];
-
-		let tok = this.nextToken(), nodefault = true;
-		while(tok.type === Token.Keyword) {
-			let test: Node.Expression|null = null;
-			if(tok.value === 'when') {
-				test = this.parseExpression(0);
-
-				this.expectKeyword("then");
-			}
-			else if(tok.value === 'else' && nodefault) {
-				nodefault = false;
 			}
 			else {
 				break;
 			}
-
-			this.consumeToken();
-
-			when.push(new Node.SwitchCase(
-				test, this.parseExpression(0)
-			));
 		}
 
-		return new Node.SwitchExpression(value, when);
+		return new Node.IfChain(clauses, null);
 	}
 
 	parseVarBinding(): Node.VariableBinding {
@@ -489,142 +437,39 @@ export class Parser {
 			v: Node.VariableBinding[] = [],
 			bind: Node.VariableBinding;
 
-		while(bind = this.parseVarBinding()) {
-			v.push(bind);
-
+		for(;;) {
+			v.push(this.parseVarBinding());
 			if(this.matchPunctuator(',')) {
 				this.consumeToken();
+				continue;
 			}
-			else {
-				break;
-			}
+			break;
 		}
 
 		return new Node.VariableDeclaration(v, kind);
 	}
 
-	parseExec(): Node.ExecBlock {
-		return new Node.ExecBlock(this.parseStatement());
-	}
-
-	parseDoBlock(): Node.DoBlock {
-		return new Node.DoBlock(
-			this.parseStatement(),
-			// Being a bit clever here, expect 'while' inline
-			(this.expectKeyword('while'), this.parseWhileExpression())
-		);
-	}
-
 	parseWhileExpression(): Node.WhileExpression {
 		return new Node.WhileExpression(
-			this.readAsClause(),
 			this.expectGroup(),
-			this.parseStatement(),
-			this.readElseClause()
-		);
-	}
-
-	parseForExpression(): Node.ForExpression {
-		return new Node.ForExpression(
-			this.readAsClause(),
-			this.parseGroup(),
-			this.parseStatement(),
-			this.readElseClause()
+			this.parseStatement()
 		);
 	}
 
 	parseReturnExpression(): Node.ReturnExpression {
 		return new Node.ReturnExpression(this.parseStatement());
 	}
-
-	parseYieldExpression(): Node.ReturnExpression {
-		let delegate = false;
-		if(this.matchKeyword('from')) {
-			delegate = true;
+	
+	parseNewExpression(): Node.NewExpression {
+		let proto = this.parseAtom(), params: Node.CallParameter[] = [];
+		
+		let open = this.matchAny(Token.GroupOpen);
+		if(open) {
 			this.consumeToken();
+			params = this.parseParameters(open.value);
 		}
-
-		return new Node.YieldExpression(
-			this.parseExpression(0), delegate
-		);
-	}
-
-	parseWithExpression(): Node.WithExpression {
-		return new Node.WithExpression(
-			this.expectGroup(),
-			this.parseStatement()
-		);
-	}
-
-	parseObjectProperty(): Node.ObjectProperty {
-		let tok = this.nextToken(), key: Node.Expression;
-
-		// Key is an expression
-		if(Character.isGroupOpen(tok.value as string)) {
-			key = this.parseGroup(tok.value as string);
-		}
-		else if(tok.type == Token.Identifier) {
-			// Identifier -> string
-			key = new Node.Literal(tok.value);
-			this.consumeToken();
-		}
-		else if(tok.type == Token.NilLiteral) {
-			key = new Node.Literal({
-				nil: null,
-				false: false,
-				true: true
-			}[tok.value]);
-		}
-		else {
-			throw this.unexpectedToken(tok);
-		}
-
-		this.expectPunctuator(":");
-
-		let val = this.parseExpression(COMPACT);
-
-		return new Node.ObjectProperty(key, val);
-	}
-
-	parseObjectLiteral(): Node.ObjectLiteral|Node.Literal {
-		let
-			end = Character.toGroupClose(this.expectAny(Token.Punctuator).value as string),
-			props: Node.ObjectProperty[] = [],
-			off = 0;
-
-		// $() or $[] or ${}, nil
-		if(this.matchPunctuator(end)) {
-			return new Node.Literal(null);
-		}
-		// ${...}
-		else if(end == "}") {
-			do {
-				props.push(this.parseObjectProperty());
-			} while(this.matchPunctuator(','));
-
-			this.expectPunctuator(end);
-		}
-		// $(...) or $[...], sequential objects
-		else {
-			do {
-				let prop = this.parseExpression(COMPACT);
-				if(this.matchPunctuator(',')) {
-					this.consumeToken();
-				}
-				else {
-					this.expectPunctuator(end);
-					break;
-				}
-			} while(this.matchPunctuator(','));
-
-			this.expectPunctuator(end);
-
-			return new Node.Literal(props);
-		}
-
-		this.consumeToken();
-
-		return new Node.ObjectLiteral(props);
+		
+		return new Node.NewExpression(proto, params);
 	}
 
 	parseAtom() {
@@ -639,30 +484,22 @@ export class Parser {
 			case Token.NilLiteral:
 				return new Node.Literal(null);
 			case Token.NumericLiteral:
-				return new Node.Literal(tok.value as number);
+				return new Node.Literal(parseInt(tok.value));
 			case Token.StringLiteral:
-				return new Node.Literal(tok.value as string);
+				return new Node.Literal(tok.value);
 
 			case Token.Keyword:
 				switch(tok.value) {
 					case 'if': return this.parseIfExpression();
 					case 'var': return this.parseVarDeclaration('var');
-					case 'for': return this.parseForExpression();
-					case 'case': return this.parseCaseExpression();
 					case 'while': return this.parseWhileExpression();
-					case 'do': return this.parseDoBlock();
 					case 'let': return this.parseFunctionExpression();
-					case 'new': return this.parseNew();
-					case 'proto': return this.parseProto();
-					case 'import': return this.parseImportExpression();
-					case 'export': return this.parseExportExpression();
 					case 'return': return this.parseReturnExpression();
-					case 'yield': return this.parseYieldExpression();
 					case 'fail':
 						return new Node.FailExpression(
-							this.parseExpression(0)
+							this.parseStatement()
 						);
-					case 'with': return this.parseWithExpression();
+					case 'new': return this.parseNewExpression();
 					case 'this': return new Node.ThisExpression();
 					
 					default:
@@ -670,10 +507,10 @@ export class Parser {
 				}
 			
 			case Token.GroupOpen:
-				return this.parseGroup(tok.value as string);
+				return this.parseGroup(tok.value);
 	
 			case Token.Identifier:
-				return new Node.Identifier(tok.value as string);
+				return new Node.Identifier(tok.value);
 			
 			case Token.Punctuator:
 				op = UNARYOPS[tok.value];
@@ -690,7 +527,9 @@ export class Parser {
 	}
 
 	nextBinaryOperator(minprec: number) {
-		let tok = this.matchAny(Token.Punctuator);
+		let tok =
+			this.matchAny(Token.Punctuator) ||
+			this.matchAny(Token.GroupOpen);
 
 		if(tok) {
 			let op = BINARYOPS[tok.value];
@@ -702,7 +541,7 @@ export class Parser {
 			this.consumeToken();
 			return {
 				token: tok, prec: op,
-				leftassoc: (RIGHTOPS.indexOf(tok.value as string) == -1) ? 1 : 0
+				leftassoc: (RIGHTOPS.indexOf(tok.value) == -1) ? 1 : 0
 			};
 		}
 
@@ -711,24 +550,33 @@ export class Parser {
 
 	parseExpression(minprec: number): Node.Expression {
 		let lhs = this.parseAtom(), op;
-
 		while(op = this.nextBinaryOperator(minprec)) {
 			let tv = op.token.value;
-
 			if(Character.isGroupOpen(tv)) {
 				lhs = new Node.CallExpression(
-					lhs, this.readParams()
+					lhs, this.parseParameters(tv)
 				);
 				continue;
 			}
-
+			
 			let next_min_prec = op.prec + op.leftassoc;
-
-			let rhs = this.parseExpression(next_min_prec);
-
-			lhs = new Node.BinaryExpression(op.token.value, lhs, rhs);
+			
+			if(op.value === '.') {
+				let id = this.matchAny(Token.Identifier);
+				if(id) {
+					lhs = new Node.BinaryExpression(
+						op.token.value, lhs,
+						new Node.Literal(id.value)
+					);
+				}
+			}
+			
+			lhs = new Node.BinaryExpression(
+				op.token.value, lhs,
+				this.parseExpression(next_min_prec)
+			);
 		}
-
+		
 		return lhs;
 	}
 	
@@ -753,7 +601,7 @@ export class Parser {
 				break;
 			}
 
-			sub.push(this.parseExpression(COMPACT));
+			sub.push(this.parseStatement());
 		}
 
 		return new Node.Group(sub);

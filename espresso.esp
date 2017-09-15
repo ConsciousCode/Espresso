@@ -1,0 +1,154 @@
+let is_ident(id) {
+	return id.isAlpha() or id == "_" or id == "$";
+}
+
+var Token = object {
+	"new": let(type, value, pos) {
+		this.type = type;
+		this.value = value;
+		this.pos = pos;
+	}
+};
+
+var Lexer = object {
+	"new": let(source) {
+		this.source = source;
+		this.pos = 0;
+		this.placeholder = "";
+	},
+	
+	"consume": let() {
+		this.pos = this.pos + 1;
+		return this.placeholder = this.source[this.pos];
+	},
+	"next": let() {
+		return this.placeholder or this.consume();
+	},
+	"eof": let() {
+		return this.pos >= this.placeholder.length;
+	},
+	
+	"getPosition": let() {
+		return object {
+			"pos": this.pos
+		};
+	},
+	
+	"makeToken": let(type, start) {
+		if(this.pos != start.pos) {
+			return new Token(type, this.source.slice(this.pos, start.pos), start);
+		}
+		else {
+			return nil;
+		}
+	},
+	
+	"scanSpace": let() {
+		var start = this.getPosition();
+		while(this.next().isSpace()) {
+			this.consume();
+		}
+		
+		return this.makeToken("space", start);
+	},
+	
+	"scanNumber": let() {
+		var start = this.getPosition();
+		while(this.next().isDigit()) {
+			this.consume();
+		}
+		
+		return this.makeToken("number", start);
+	},
+	
+	"scanString": let() {
+		var q = this.next();
+		if(q == "\"") {
+			var start = this.getPosition();
+			this.consume();
+			
+			var pos = this.pos;
+			
+			while(not this.eof() and this.next() != "\"") {
+				if(this.next() == "\\") {
+					this.consume();
+				}
+				
+				this.consume();
+			}
+			
+			if(this.next() != "\"") {
+				fail "Reached EOF while parsing string";
+			}
+			var end = this.pos;
+			this.consume();
+			
+			return new Token("string", this.source.slice(pos, end), start);
+		}
+		else {
+			return nil;
+		}
+	},
+	
+	"scanIdentifier": let() {
+		var start = this.getPosition();
+		while(is_ident(this.next())) {
+			this.consume();
+		}
+		
+		var val = this.source.slice(start.pos, this.pos);
+		
+		return new Token(
+			if(is_keyword(val)) "keyword"
+			else if(val == "nil") "nil"
+			else if(val == "true" or val == "false") "bool"
+			else "identifier",
+			val, start
+		);
+	},
+	
+	"scanPunctuator2": let(start, p) {
+		if(p == "==" or p == "!=" or p == ">=" or p == "<=") {
+			return new Token("punctuator", p, start);
+		}
+		else {
+			return nil;
+		}
+	},
+	
+	"scanPunctuator1": let(start, p) {
+		if(
+			p == "+" or p == "-" or p == "*" or p == "/" or
+			p == ":" or p == ";" or p == "." or p == "," or
+			p == "<" or p == ">" or p == "!" or p == "=" or
+			p == "(" or p == ")" or
+			p == "[" or p == "]" or
+			p == "{" or p == "}"
+		) {
+			return new Token("punctuator", p, start);
+		}
+		else {
+			return nil;
+		}
+	},
+	
+	"scanPunctuator": let() {
+		var
+			start = this.getPosition(),
+			p = this.source.slice(this.pos, this.pos + 2);
+		
+		return
+			this.scanPunctuator2(start, p) or
+			this.scanPunctuator1(start, p) or nil;
+	},
+	
+	"lex": let() {
+		return
+			this.scanSpace() or
+			this.scanNumber() or
+			this.scanString() or
+			this.scanIdentifier() or
+			this.scanPunctuator() or
+			fail "Unknown token";
+	}
+};

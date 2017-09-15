@@ -1,0 +1,39 @@
+{
+	scopeName = 'espresso';
+	fileTypes = ('.esp', '.espresso');
+	foldingStartMarker = '\{\s*$';
+	foldingStopMarker = '^\s*\}';
+	patterns = (
+		{
+			name = 'comment.line.number-sign';
+			match = '^\s*#.+?$'
+		}, {
+			name = 'constant.numeric';
+			match = '\d+';
+		}, {
+			name = 'constant.language';
+			match = '\b(true|false|nil)\b';
+		}, {
+		
+		}, {
+			name = 'keyword.control';
+			match = '\b(if|else|while|try|catch|continue|break|redo|return|fail)\b';
+		}, {
+			name = 'keyword.operator';
+			match = '\b(and|or|not|in|is)\b';
+		}, {
+			name = 'string.quoted.double';
+			begin = '"';
+			end = '"';
+			patterns = (
+				{
+					name = 'constant.character.escape';
+					match = '\\.';
+				}
+			)
+		}, {
+			name = 'variable.language';
+			match = '\b(this|super)\b';
+		}
+	)
+}

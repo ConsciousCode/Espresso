@@ -14,7 +14,7 @@ export interface Position {
 
 export interface RawToken {
 	type: Token;
-	value: string | number;
+	value: string;
 
 	pos?: Position;
 }
@@ -54,23 +54,38 @@ export class Scanner {
 		}
 		return new Error("Unexpected token");
 	}
-
+	
+	/**
+	 * Advance to the next virtual character, changing the
+	 *  positional metadata to match.
+	**/
 	consume(): string {
-		let c = this.source[++this.index];
-		switch(c) {
+		let
+			c = this.source[this.index],
+			nc = this.source[++this.index];
+			
+		// Treat \r\n as a single character
+		if(c === '\r' && nc === '\n') {
+			++this.index;
+		}
+		
+		if(Character.isNewline(c)) {
+			++this.line;
+			this.col = 0;
+		}
+		else {
+			++this.col;
+		}
+		
+		switch(nc) {
 			case '\r':
-				if(this.source[this.index] == '\n') {
-					++this.index;
-				}
 			case '\n':
-				++this.line;
-				this.col = 0;
+				// All newlines are abstracted as \n
 				this.lookahead = '\n';
 				break;
 
 			default:
-				this.lookahead = c;
-				++this.col;
+				this.lookahead = nc;
 		}
 
 		return this.lookahead;
@@ -91,114 +106,54 @@ export class Scanner {
 			end: 0
 		}
 	}
-
-	skipSingleLineComment() {
-		while(!this.eof() && this.consume() != '\n') { }
+	
+	makeToken(type: Token, pos: Position, end?: number): RawToken {
+		pos.end = end || this.index;
+		return {
+			type, pos, value: this.source.slice(
+				pos.start, this.index
+			)
+		};
 	}
-
-	skipMultiLineComment(type: string) {
-		let end = Character.toGroupClose(type);
-		while(!this.eof()) {
-			let ch = this.consume();
-			if(ch === "#") {
-				ch = this.consume();
-				if(Character.isGroupOpen(ch)) {
-					this.skipMultiLineComment(ch);
-				}
-			}
-			else if(ch === end) {
-				// Block comment ends with '<close>#''
-				if(this.consume() == "#") {
-					break;
-				}
-			}
+	
+	skipSpace() {
+		while(Character.isWhiteSpace(this.next())) {
+			this.consume();
 		}
 	}
-
-	public scanComments(): boolean {
-		let present = false;
-		while(!this.eof()) {
-			let ch = this.next();
-
-			if(ch === "#") {
-				ch = this.consume();
-				if(Character.isGroupOpen(ch)) {
-					this.skipMultiLineComment(ch);
-				}
-				else {
-					this.skipSingleLineComment();
-				}
-			}
-			else if(!Character.isWhiteSpace(ch)) {
-				break;
-			}
-
-			present = true;
-		}
-
-		return present;
-	}
-
-	scanGroup(): RawToken | null {
-		let ch = this.next(), pos = this.getPosition();
-		let type: Token;
-		if(Character.isGroupOpen(ch)) {
-			type = Token.GroupOpen;
-		}
-		else if(Character.isGroupClose(ch)) {
-			type = Token.GroupClose;
-		}
-		else {
+	
+	scanSpace(): RawToken|null {
+		let start = this.getPosition();
+		this.skipSpace();
+		if(start.start == this.index) {
 			return null;
 		}
-
-		this.consume();
-
-		return {
-			type: type,
-			value: ch,
-			pos: pos
-		};
+		else {
+			return this.makeToken(Token.Whitespace, start);
+		}
+	}
+	
+	isOperator(id: string): boolean {
+		return [
+			"and", "or", "not",
+			"is", "in",
+		].indexOf(id) != -1;
 	}
 
 	isKeyword(id: string): boolean {
 		return [
 			"if", "else",
 			"try", "fail",
-			"for", "while",
-			"do", "with",
+			"while",
 			"new", "del",
-			"import", "export",
-			"proto", "enum",
-			"var", "def",
-			"let", "use",
-			"and", "or", "not",
-			"is", "in",
-			"as",
-			"case", "when",
-			"break", "continue", "redo",
-			"return", "yield",
-			"this", "super",
-			"true", "false", "nil"
+			"var", "let",
+			"break", "continue",
+			"return",
+			"this"
 		].indexOf(id) != -1;
 	}
 
-	scanHexEscape(len: number): string | null {
-		let code = 0, ch = this.next();
-
-		for(let i = 0; i < len; ++i) {
-			if(!this.eof() && Character.isHexDigit(this.consume())) {
-				code = code * 16 + hexValue(ch);
-				ch = this.consume();
-			}
-			else {
-				return null;
-			}
-		}
-		return String.fromCharCode(code);
-	}
-
-	scanIdentifier(): RawToken | null {
+	scanIdentifier(): RawToken|null {
 		let pos = this.getPosition();
 
 		let ch = this.next();
@@ -217,7 +172,10 @@ export class Scanner {
 			id = this.source.slice(pos.start, this.index),
 			type: Token;
 
-		if(this.isKeyword(id)) {
+		if(this.isOperator(id)) {
+			type = Token.Punctuator;
+		}
+		else if(this.isKeyword(id)) {
 			type = Token.Keyword;
 		}
 		else if(id === 'nil') {
@@ -229,47 +187,27 @@ export class Scanner {
 		else {
 			type = Token.Identifier;
 		}
-
-		pos.end = this.index;
-
-		return {
-			type: type,
-			value: id,
-			pos: pos
-		};
+		
+		return this.makeToken(type, pos);
 	}
-
-	scanPunctuator3(str: string): string {
-		switch(str) {
-			case ">>>":
-			case "!!!":
-			case "...":
-				return str;
+	
+	scanGroup(): RawToken|null {
+		let pos = this.getPosition(), c = this.next();
+		switch(c) {
+			case "(":
+			case "[":
+			case "{":
+				this.consume();
+				return this.makeToken(Token.GroupOpen, pos);
 			
-			default: return "";
+			case ")":
+			case "]":
+			case "}":
+				this.consume();
+				return this.makeToken(Token.GroupClose, pos);
+			
+			default: return null;
 		}
-	}
-
-	scanPunctuator2(str: string): string {
-		str = str.substr(0, 2);
-
-		switch(str) {
-			case "++": case "--":
-			
-			case "**": case "//": case "%%":
-			
-			case "==": case "!=":
-			case "<=": case ">=":
-			case "&&": case "||":
-			
-			case "&&": case "||":
-			case "<<": case ">>":
-			
-			case "|>":
-				return str;
-		}
-
-		return "";
 	}
 
 	scanPunctuator1(str: string): string {
@@ -283,33 +221,36 @@ export class Scanner {
 			case "!": case "?":
 			case ';': case ":":
 
-			case "@":
-			case "&": case "|":
-			case "~": case "^":
-
-			case "=": case "$":
+			case "=":
 				return str[0];
 		}
 		return "";
 	}
+	
+	scanPunctuator2(str: string): string {
+		let s = str.slice(0, 2);
+		switch(s) {
+			case '==':
+			case '>=':
+			case '<=':
+			case '!=':
+				return s;
+		}
+		
+		return "";
+	}
 
-	scanPunctuator(): RawToken | null {
+	scanPunctuator(): RawToken|null {
 		let
 			pos = this.getPosition(),
-			str = this.source.substr(this.index, 3),
-			pun = "";
-
-		if(pun = this.scanPunctuator3(str)) {
-			this.index += 3;
-			this.col += 3;
+			str = this.source.substr(this.index, 3);
+		
+		if(this.scanPunctuator2(str)) {
+			this.consume();
+			this.consume();
 		}
-		else if(pun = this.scanPunctuator2(str)) {
-			this.index += 2;
-			this.col += 2;
-		}
-		else if(pun = this.scanPunctuator1(str)) {
-			++this.index;
-			++this.col;
+		else if(this.scanPunctuator1(str)) {
+			this.consume();
 		}
 		else {
 			return null;
@@ -318,126 +259,50 @@ export class Scanner {
 		// Reset lookahead so consume can recalculate
 		this.lookahead = this.source[this.index];
 
-		return {
-			type: Token.Punctuator,
-			value: pun,
-			pos: pos
-		};
+		return this.makeToken(Token.Punctuator, pos);
 	}
 
-	scanBase(ch: string, base: number): RawToken | null {
-		let num = '';
+	scanDecimalLiteral(): RawToken|null {
+		let num = '', pos = this.getPosition(), ch;
 
-		if(this.next().toLowerCase() != ch) {
-			return null;
-		}
-
-		do {
-			let ch = this.consume();
-
-			if(this.scanComments()) {
-				continue;
-			}
-			else if(Character.isBase(ch, base)) {
-				num += ch;
-			}
-			else {
-				break;
-			}
-
-		} while(!this.eof());
-
-		if(num.length === 0) {
-			throw this.scanError("No number follows 0" + ch);
-		}
-
-		return {
-			type: Token.NumericLiteral,
-			value: parseInt(num, base)
-		};
-	}
-
-	scanDecimalLiteral(ch: string): RawToken {
-		let num = '', dot = false, pos = this.getPosition();
-
-		while(!this.eof() && Character.isDecimalDigit(ch)) {
-			if(ch == '.') {
-				if(dot) break;
-				dot = true;
-			}
-
+		while(!this.eof() && /\d/.test(ch = this.next())) {
 			num += ch;
-			ch = this.consume();
+			this.consume();
 		}
-
-		pos.end = this.index;
-
-		return {
-			type: Token.NumericLiteral,
-			value: parseFloat(num),
-			pos: pos
-		};
-	}
-
-	scanNumericLiteral(): RawToken | null {
-		let ch = this.next();
-		if(!Character.isDecimalDigit(ch)) {
+		
+		if(this.index == pos.start) {
 			return null;
 		}
-
-		if(ch === '0') {
-			let pos = this.getPosition();
-
-			this.consume();
-
-			let tok =
-				this.scanBase('x', 16) ||
-				this.scanBase('o', 8) ||
-				this.scanBase('b', 2);
-			if(tok) {
-				tok.pos = pos;
-				return tok;
-			}
+		else {
+			return this.makeToken(Token.NumericLiteral, pos);
 		}
-
-		return this.scanDecimalLiteral(ch);
 	}
 
-	scanStringLiteral(): RawToken | null {
+	scanNumericLiteral(): RawToken|null {
+		return this.scanDecimalLiteral();
+	}
+
+	scanStringLiteral(): RawToken|null {
 		let pos = this.getPosition();
 		let quote = this.next();
 		if(!Character.isQuote(quote)) {
 			return null;
 		}
 
-		let str = '';
-
-		while(!this.eof()) {
-			let ch = this.consume();
-
+		let str = '', ch = this.consume();
+		
+		while(ch != quote) {
+			if(this.eof()) {
+				throw this.scanError("EOF while parsing string");
+			}
+			
 			if(ch === '\\') {
 				ch = this.consume();
-				if(ch === 'x') {
-					let x = this.scanHexEscape(2);
-					if(x) {
-						str += x;
-					}
-					else {
-						break;
-					}
-				}
-				else if(Character.isNewline(ch)) {
+				if(Character.isNewline(ch)) {
 					str += '\n';
 				}
 				else {
-					str += {
-						'a': '\x07',
-						'n': '\n',
-						'r': '\r',
-						't': '\t',
-						'f': '\f',
-						'v': '\v'
-					}[ch] || ch;
+					str += ch;
 				}
 			}
 			else if(Character.isNewline(ch)) {
@@ -446,19 +311,13 @@ export class Scanner {
 			else {
 				str += ch;
 			}
+			
+			ch = this.consume();
 		}
 		
-		if(this.eof()) {
-			throw this.scanError("EOF while parsing string");
-		}
-
-		pos.end = this.index;
-
-		return {
-			type: Token.StringLiteral,
-			value: str,
-			pos: pos
-		};
+		this.consume();
+		
+		return this.makeToken(Token.StringLiteral, pos);
 	}
 
 	public lex(): RawToken {
@@ -469,17 +328,17 @@ export class Scanner {
 			};
 		}
 
-		this.scanComments();
-
 		let tok = (
+			this.scanSpace() ||
+			this.scanNumericLiteral() ||
+			this.scanStringLiteral() ||
 			this.scanIdentifier() ||
 			this.scanGroup() ||
-			this.scanStringLiteral() ||
-			this.scanNumericLiteral() ||
 			this.scanPunctuator()
 		);
 
 		if(tok === null) {
+			console.log(JSON.stringify(this.source.slice(this.index, this.index + 20)) + "...")
 			throw this.scanError("Unknown token");
 		}
 		return tok;

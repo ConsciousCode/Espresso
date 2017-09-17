@@ -1,22 +1,22 @@
-#####Unary
-* + -
+#### Unary
+* \+ \-
 * ~ ! not
 * ++ --
 * ::
 * @
 
-#####Binary
+#### Binary
 * ;
 * , =
 * || or
 * && and
 * in is < <= > >= == !=
-* + -
-* * / %
+* \+ \-
+* \* / %
 * ::
 * .
 
-#####Potential operators
+#### Potential operators
 * Overloadable
   - a -> b
   - a => b

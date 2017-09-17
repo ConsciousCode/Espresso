@@ -1,13 +1,15 @@
 import * as Node from './nodes';
 
 function visit(n, v) {
-	let name = n.__proto__.constructor.name;
-	
-	if(v[name]) {
-		return v[name](n);
-	}
-	else {
-		throw new Error(`Not implemented: ${name}`)
+	if(n) {
+		let name = n.__proto__.constructor.name;
+		
+		if(v[name]) {
+			return v[name](n);
+		}
+		else {
+			throw new Error(`Not implemented: ${name}`)
+		}
 	}
 }
 
@@ -26,11 +28,11 @@ export class Scope {
 	}
 	
 	assign(k, v) {
-		this.vars[k] = v;
+		return this.vars[k] = v;
 	}
 	
 	push(v) {
-		this.valuestack.push(v);
+		return this.valuestack.push(v);
 	}
 	
 	pop() {
@@ -57,11 +59,11 @@ export class CallFrame {
 	}
 	
 	assign(k, v) {
-		this.scope[this.scope.length - 1].assign(k, v);
+		return this.scope[this.scope.length - 1].assign(k, v);
 	}
 	
 	push(v) {
-		this.scope[this.scope.length - 1].push(v);
+		return this.scope[this.scope.length - 1].push(v);
 	}
 	
 	pop() {
@@ -74,11 +76,15 @@ class EspFunction {
 	defs: Node.FunctionParameter[];
 	body: Node.Expression;
 	
-	constructor(name, defs, body) {
+	frame: CallFrame;
+	
+	constructor(name, defs, body, frame) {
 		this.name = name;
 		this.defs = defs;
 		// Add an extra return to normalize execution
 		this.body = new Node.ReturnExpression(body);
+		
+		this.frame = frame;
 	}
 	
 	call(env: Interpreter, self, args) {
@@ -86,33 +92,63 @@ class EspFunction {
 			throw new Error("Argument length mismatch");
 		}
 		
+		// Load the lexical scope
+		env.callstack.push(this.frame);
+		
 		env.callstack.push(new CallFrame());
 		env.assign('this', self);
 		for(let i = 0; i < args.length; ++i) {
 			env.assign(this.defs[i].id.name, args[i]);
 		}
 		
+		// Unload the lexical scope
+		env.callstack.pop();
+		
 		return env.visit(this.body);
 	}
 }
 
-class EspObject {
-	readonly value: object;
+class EspNativeFunction {
+	name: Node.Identifier;
+	func: Function;
 	
-	constructor(value) {
-		this.value = value;
+	constructor(func: Function) {
+		this.name = new Node.Identifier("<native>");
+		this.func = func;
+	}
+	
+	call(env: Interpreter, self, args) {
+		return this.func.call(self, args);
 	}
 }
+
+const nil = null;
+
+function prototype(proto, fields) {
+	let value = Object.create(proto);
+	for(let k in fields) {
+		value[k] = fields[k];
+	}
+	return value;
+}
+
+const esp_globals = {
+	g_isAlpha: new EspNativeFunction(function(args) {
+		return /[a-z]+/i.test(args[0]);
+	}),
+	g_isDigit: new EspNativeFunction(function(args) {
+		return /\d+/.test(args[0]);
+	}),
+	object: new EspNativeFunction(function(args) {
+		return args;
+	})
+};
 
 export class Interpreter {
 	callstack: CallFrame[];
 	
 	constructor() {
 		this.callstack = [];
-	}
-	
-	makeNil() {
-		return null;
 	}
 	
 	visit(n) {
@@ -122,6 +158,9 @@ export class Interpreter {
 	exec(v) {
 		// Global call frame for scope
 		this.callstack.push(new CallFrame());
+		for(let name in esp_globals) {
+			this.assign(name, esp_globals[name]);
+		}
 		return this.visit(v);
 	}
 	
@@ -130,11 +169,16 @@ export class Interpreter {
 	}
 	
 	deref(name: string) {
-		return this.top().deref(name);
+		let v = this.top().deref(name);
+		if(typeof v === 'undefined') {
+			throw new Error(`${name} is not defined`);
+		}
+		
+		return v;
 	}
 	
 	assign(name: string, value) {
-		this.top().assign(name, value);
+		return this.top().assign(name, value);
 	}
 	
 	Identifier(n) {
@@ -165,9 +209,16 @@ export class Interpreter {
 	}
 	
 	NewExpression(n) {
-		let c = this.visit(n.callee)['new'], self = {};
-		c.call(this, self, n.arguments.map(v => this.visit(v)));
-		return new EspObject(self);
+		let
+			proto = this.visit(n.callee),
+			self = Object.create(proto);
+		
+		proto['new'].call(
+			this, self,
+			n.arguments.map(v => this.visit(v))
+		);
+		
+		return self;
 	}
 	
 	ThisExpression(n) {
@@ -177,13 +228,31 @@ export class Interpreter {
 	CallExpression(n) {
 		let
 			callee = this.visit(n.callee),
-			args = n.args.map(v => this.visit(v.value));
+			args = n.args.map(v => this.visit(v));
 		
-		return callee.call(this, this.makeNil(), args);
+		if(n.type === '(') {
+			return callee.call(this, nil, args);
+		}
+		else if(n.type === '[') {
+			if(args.length > 1) {
+				console.log("[] with more than one arg");
+			}
+			return callee[args[0]];
+		}
+		else if(n.type === "{") {
+			throw new Error("Block call");
+		}
 	}
 	
 	UnaryExpression(n) {
-		throw new Error("No unary operators");
+		let val = this.visit(n.argument);
+		
+		switch(n.operator) {
+			case 'not': return !val;
+			
+			default:
+				throw new Error(`Unknown unary operator ${n.operator}`);
+		}
 	}
 	
 	Group(n) {
@@ -193,7 +262,7 @@ export class Interpreter {
 				last = this.visit(e);
 			}
 			else {
-				last = this.makeNil();
+				last = nil;
 			}
 		}
 		
@@ -202,16 +271,24 @@ export class Interpreter {
 	
 	BinaryExpression(n) {
 		if(n.operator === '=') {
-			if(n.left instanceof Node.BinaryExpression) {
+			// Ordinary usage
+			if(n.left instanceof Node.Identifier) {
+				return this.assign(n.left.name, this.visit(n.right));
+			}
+			// x.y = z
+			else if(n.left instanceof Node.BinaryExpression) {
 				if(n.left.operator === '.') {
 					// Decompose x.y = z
 					return this.visit(n.left.left)[
 						this.visit(n.left.right)
 					] = this.visit(n.right);
 				}
+				
+				// Only . operator can be used here, default to error
 			}
+			// x[y] = z
 			else if(n.left instanceof Node.CallExpression) {
-				this.visit(n.left)['='].call(
+				return this.visit(n.left)['='].call(
 					this, this.visit(n.left.callee), [
 						n.left.arguments.map(
 							v => this.visit(v)
@@ -223,11 +300,23 @@ export class Interpreter {
 			throw new Error("rvalue in lhs of assignment");
 		}
 		
-		let lhs = this.visit(n.left), rhs = this.visit(n.right);
+		let lhs = this.visit(n.left), rhs: any;
+		
+		if(n.operator === '.') {
+			if(n.right instanceof Node.Identifier) {
+				rhs = n.right.name;
+			}
+			else {
+				rhs = this.visit(n.right);
+			}
+			
+			return lhs[rhs];
+		}
+		else {
+			rhs = this.visit(n.right);
+		}
 		
 		switch(n.operator) {
-			case ".": return lhs[rhs];
-			
 			case "+": return lhs + rhs;
 			case "-": return lhs - rhs;
 			case "*": return lhs * rhs;
@@ -241,13 +330,16 @@ export class Interpreter {
 			case "==": return lhs == rhs;
 			case "!=": return lhs != rhs;
 			
+			case "or": return lhs || rhs;
+			case "and": return lhs && rhs;
+			
 			default:
-				throw new Error(`Unknown operator ${n.operator}`);
+				throw new Error(`Unknown binary operator ${n.operator}`);
 		}
 	}
 	
 	FunctionExpression(n) {
-		let f = new EspFunction(n.name, n.defs, n.body);
+		let f = new EspFunction(n.name, n.defs, n.body, this.top());
 		
 		if(n.name) {
 			this.assign(n.name.name, f);
@@ -260,7 +352,7 @@ export class Interpreter {
 			this.visit(n.body);
 		}
 		
-		return this.makeNil();
+		return nil;
 	}
 	
 	IfChain(n) {
@@ -279,7 +371,24 @@ export class Interpreter {
 	
 	VariableDeclaration(n) {
 		for(let decl of n.declarations) {
-			this.assign(decl.name.name, this.visit(decl.init));
+			let init = this.visit(decl.init);
+			if(init === null) {
+				init = nil;
+			}
+			this.assign(decl.name.name, init);
 		}
+	}
+	
+	ObjectLiteral(n) {
+		let val = {};
+		for(let p of n.entries) {
+			val[this.visit(p.name)] = this.visit(p.value);
+		}
+		
+		return val;
+	}
+	
+	ArrayLiteral(n) {
+		return n.values.map(v => this.visit(v));
 	}
 }

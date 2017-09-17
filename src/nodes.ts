@@ -70,11 +70,36 @@ export class Literal {
 	}
 }
 
+export class ObjectEntry {
+	readonly name: Expression;
+	readonly value: Expression;
+	
+	constructor(name: Expression, value: Expression) {
+		this.name = name;
+		this.value = value;
+	}
+}
+export class ObjectLiteral {
+	readonly entries: ObjectEntry[];
+	
+	constructor(entries: ObjectEntry[]) {
+		this.entries = entries;
+	}
+}
+
+export class ArrayLiteral {
+	readonly values: Expression[];
+	
+	constructor(values: Expression[]) {
+		this.values = values;
+	}
+}
+
 export class NewExpression {
 	readonly callee: Expression;
-	readonly arguments: CallParameter[];
+	readonly arguments: Expression[];
 	
-	constructor(callee: Expression, args: CallParameter[]) {
+	constructor(callee: Expression, args: Expression[]) {
 		this.callee = callee;
 		this.arguments = args;
 	}
@@ -88,21 +113,13 @@ export class ThisExpression {
 	}
 }
 
-export class CallParameter {
-	readonly name: Expression|null;
-	readonly value: Expression;
-	
-	constructor(name: Expression|null, value: Expression) {
-		this.name = name;
-		this.value = value;
-	}
-}
-
 export class CallExpression {
+	readonly type: string;
 	readonly callee: Expression;
-	readonly args: CallParameter[];
+	readonly args: Expression[];
 
-	constructor(callee: Expression, args: CallParameter[]) {
+	constructor(type: string, callee: Expression, args: Expression[]) {
+		this.type = type;
 		this.callee = callee;
 		this.args = args;
 	}
@@ -116,6 +133,7 @@ export class UnaryExpression {
 	readonly operator: string;
 	readonly argument: Expression;
 	readonly prefix: boolean;
+	
 	constructor(operator, argument) {
 		this.operator = operator;
 		this.argument = argument;

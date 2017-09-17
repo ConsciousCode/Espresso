@@ -220,7 +220,7 @@ export class Parser {
 	//////////////////////
 	
 	parseElseClause(): Node.ElseClause {
-		return new Node.ElseClause(this.parseStatement());
+		return new Node.ElseClause(this.parseBlock());
 	}
 	
 	readElseClause(): Node.ElseClause|null {
@@ -235,10 +235,10 @@ export class Parser {
 	////////////////////
 	/** Atom parsing **/
 	////////////////////
-
-	parseGroup(open: string): Node.Expression {
+	parseParen(open: string): Node.Expression {
 		let clauses: (Node.Expression | null)[] = [];
 		const close = Character.toGroupClose(open);
+		
 		for(;;) {
 			// Allow consecutive semicolons
 			while(this.matchPunctuator(';')) {
@@ -267,6 +267,26 @@ export class Parser {
 		return new Node.Group(clauses);
 	}
 	
+	/**
+	 * Parse a group with any opening type. igtype is true if the group
+	 *  should be parentheses-like no matter the opening character, such as
+	 *  when parsing blocks.
+	**/
+	parseGroup(open: string, igtype: boolean = false): Node.Expression {
+		if(igtype) {
+			return this.parseParen(open);
+		}
+		
+		switch(open) {
+			case "(": return this.parseParen('(');
+			case '[': return this.parseArrayLiteral();
+			case "{": return this.parseObjectLiteral();
+			
+			default:
+				throw new Error(`'${open}' is not a group opening`);
+		}
+	}
+	
 	expectGroup(): Node.Expression {
 		let tok = this.nextToken();
 		if(tok.type === Token.GroupOpen) {
@@ -275,6 +295,27 @@ export class Parser {
 		}
 		
 		throw this.unexpectedToken(tok);
+	}
+	
+	/**
+	 * This is a common parsing pattern, so abstract it
+	 *  Ex: fn(), fn(), ..., fn()
+	**/
+	parseCommaSeparatedClause(fn) {
+		let args: any[] = [];
+		
+		for(;;) {
+			args.push(fn.call(this));
+			
+			if(this.matchPunctuator(',')) {
+				this.consumeToken();
+			}
+			else {
+				break;
+			}
+		}
+		
+		return args;
 	}
 
 	/**
@@ -313,51 +354,80 @@ export class Parser {
 		return params;
 	}
 	
-	parseParam(): Node.CallParameter {
-		let a: Node.Expression = this.parseStatement();
-		
-		if(this.matchPunctuator(":")) {
-			this.consumeToken();
-			if(a instanceof Node.Identifier) {
-				a = new Node.Literal(a.name);
-			}
-			
-			return new Node.CallParameter(a, this.parseStatement());
-		}
-		else {
-			return new Node.CallParameter(null, a);
-		}
-	}
-
 	/**
 	 * Parse the parameters being provided to a function call
 	**/
-	parseParameters(open: string): Node.CallParameter[] {
-		let args: Node.CallParameter[] = [];
-
+	parseParameters(open: string): Node.Expression[] {
 		const END = Character.toGroupClose(open);
+		let args: any[] = [];
 		
 		if(this.match(Token.GroupClose, END)) {
 			this.consumeToken();
-			return [];
 		}
-		
-		for(;;) {
-			let p = this.parseParam();
-			console.log(p);
-			args.push(p);
+		else {
+			args = this.parseCommaSeparatedClause(this.parseStatement);
 			
-			if(this.matchPunctuator(',')) {
-				this.consumeToken();
-			}
-			else {
-				break;
-			}
+			this.expect(Token.GroupClose, END);
 		}
-		
-		this.expect(Token.GroupClose, END);
 		
 		return args;
+	}
+	
+	parseObjectEntry(): Node.ObjectEntry {
+		let
+			tok = this.matchAny(Token.Identifier),
+			key: Node.Expression, val: Node.Expression;
+		
+		if(tok) {
+			this.consumeToken();
+			
+			key = new Node.Literal(tok.value);
+			
+			if(this.matchPunctuator(":")) {
+				this.consumeToken();
+				
+				val = this.parseStatement();
+			}
+			else {
+				val = new Node.Identifier(tok.value);
+			}
+		}
+		else {
+			key = this.parseStatement();
+			
+			this.expectPunctuator(":");
+			
+			val = this.parseStatement();
+		}
+		
+		return new Node.ObjectEntry(key, val);
+	}
+	parseObjectLiteral(): Node.ObjectLiteral {
+		let args: any[] = [];
+		
+		if(this.match(Token.GroupClose, "}")) {
+			this.consumeToken();
+		}
+		else {
+			args = this.parseCommaSeparatedClause(this.parseObjectEntry);
+			this.expect(Token.GroupClose, "}");
+		}
+		
+		return new Node.ObjectLiteral(args);
+	}
+	
+	parseArrayLiteral(): Node.ArrayLiteral {
+		let args: any[] = [];
+		
+		if(this.match(Token.GroupClose, ']')) {
+			this.consumeToken();
+		}
+		else {
+			args = this.parseCommaSeparatedClause(this.parseStatement);
+			this.expect(Token.GroupClose, ']');
+		}
+		
+		return new Node.ArrayLiteral(args);
 	}
 
 	/**
@@ -380,7 +450,7 @@ export class Parser {
 		return new Node.FunctionExpression(
 			this.parseFunctionName(),
 			this.readParamDefs(),
-			this.parseStatement()
+			this.parseBlock()
 		);
 	}
 
@@ -388,16 +458,12 @@ export class Parser {
 		let clauses: Node.IfClause[] = [];
 		
 		for(;;) {
-			let g = this.expectGroup();
-			let s = this.parseStatement();
 			clauses.push(
-				new Node.IfClause(g, s));
-				/*
+				new Node.IfClause(
 					this.expectGroup(),
-					this.parseStatement()
+					this.parseBlock()
 				)
 			);
-			*/
 
 			// This is fairly complicated, so I put it in a block of its own rather
 			//  than in the while test
@@ -452,7 +518,7 @@ export class Parser {
 	parseWhileExpression(): Node.WhileExpression {
 		return new Node.WhileExpression(
 			this.expectGroup(),
-			this.parseStatement()
+			this.parseBlock()
 		);
 	}
 
@@ -461,7 +527,8 @@ export class Parser {
 	}
 	
 	parseNewExpression(): Node.NewExpression {
-		let proto = this.parseAtom(), params: Node.CallParameter[] = [];
+		// Simplification: proto assumed to be an atom
+		let proto = this.parseAtom(), params: Node.Expression[] = [];
 		
 		let open = this.matchAny(Token.GroupOpen);
 		if(open) {
@@ -516,7 +583,7 @@ export class Parser {
 				op = UNARYOPS[tok.value];
 				if(op) {
 					return new Node.UnaryExpression(
-						op.value, this.parseExpression(op)
+						tok.value, this.parseExpression(op)
 					)
 				}
 			//... Fallthrough
@@ -554,7 +621,7 @@ export class Parser {
 			let tv = op.token.value;
 			if(Character.isGroupOpen(tv)) {
 				lhs = new Node.CallExpression(
-					lhs, this.parseParameters(tv)
+					tv, lhs, this.parseParameters(tv)
 				);
 				continue;
 			}
@@ -585,6 +652,18 @@ export class Parser {
 	**/
 	parseStatement(): Node.Expression {
 		return this.parseExpression(COMPACT);
+	}
+	
+	parseBlock(): Node.Expression {
+		// Blocks can have curly braces around them which are normally
+		//  parsed as object literals.
+		let tok = this.matchAny(Token.GroupOpen)
+		if(tok) {
+			this.consumeToken();
+			return this.parseGroup(tok.value, true);
+		}
+		
+		return this.parseStatement();
 	}
 
 	parseScript(): Node.Group {

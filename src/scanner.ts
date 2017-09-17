@@ -283,13 +283,12 @@ export class Scanner {
 	}
 
 	scanStringLiteral(): RawToken|null {
-		let pos = this.getPosition();
-		let quote = this.next();
+		let pos = this.getPosition(), quote = this.next();
 		if(!Character.isQuote(quote)) {
 			return null;
 		}
 
-		let str = '', ch = this.consume();
+		let str = '', ch = this.consume(), index = this.index;
 		
 		while(ch != quote) {
 			if(this.eof()) {
@@ -317,7 +316,13 @@ export class Scanner {
 		
 		this.consume();
 		
-		return this.makeToken(Token.StringLiteral, pos);
+		// Can't use makeToken because we won't include
+		//  the quotes in the final string value
+		return {
+			type: Token.StringLiteral,
+			value: this.source.slice(index, this.index - 1),
+			pos
+		};
 	}
 
 	public lex(): RawToken {

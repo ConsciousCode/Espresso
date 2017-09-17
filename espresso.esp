@@ -1,8 +1,8 @@
 let is_ident(id) {
-	return id.isAlpha() or id == "_" or id == "$";
+	return g_isAlpha(id) or id == "_" or id == "$";
 }
 
-var Token = object {
+var Token = {
 	"new": let(type, value, pos) {
 		this.type = type;
 		this.value = value;
@@ -10,7 +10,7 @@ var Token = object {
 	}
 };
 
-var Lexer = object {
+var Lexer = {
 	"new": let(source) {
 		this.source = source;
 		this.pos = 0;
@@ -29,7 +29,7 @@ var Lexer = object {
 	},
 	
 	"getPosition": let() {
-		return object {
+		return {
 			"pos": this.pos
 		};
 	},
@@ -45,7 +45,7 @@ var Lexer = object {
 	
 	"scanSpace": let() {
 		var start = this.getPosition();
-		while(this.next().isSpace()) {
+		while(g_isSpace(this.next())) {
 			this.consume();
 		}
 		
@@ -54,7 +54,7 @@ var Lexer = object {
 	
 	"scanNumber": let() {
 		var start = this.getPosition();
-		while(this.next().isDigit()) {
+		while(g_isDigit(this.next())) {
 			this.consume();
 		}
 		

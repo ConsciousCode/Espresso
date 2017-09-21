@@ -105,11 +105,17 @@ export class Parser {
 			pos.start
 		)
 	}
+	
+	error(msg: string, pos: Position): Error {
+		return new Error(
+			`${msg} at ${this.summarizePosition(pos)}`
+		)
+	}
 
 	unexpectedToken(tok: RawToken): Error {
-		return new Error(
-			"Unexpected " + summarize_token(tok) + " at " +
-			this.summarizePosition(tok.pos||this.scanner.getPosition())
+		return this.error(
+			"Unexpected token",
+			tok.pos||this.scanner.getPosition()
 		);
 	}
 
@@ -614,34 +620,80 @@ export class Parser {
 
 		return null;
 	}
+	
+	subparseCall(open: string, lhs: Node.Expression) {
+		let params = this.parseParameters(open);
+		
+		if(lhs instanceof Node.AccessExpression) {
+			return new Node.MethodCallExpression(
+				open, lhs.left, lhs.right, params
+			);
+		}
+		else {
+			return new Node.CallExpression(
+				open, lhs, params
+			);
+		}
+	}
+
+	subparseAccess(lhs: Node.Expression, nmp: number) {
+		let id = this.matchAny(Token.Identifier), rhs;
+		if(id) {
+			this.consumeToken();
+			rhs = new Node.Literal(id.value);
+		}
+		else {
+			rhs = this.parseExpression(nmp);
+		}
+		
+		return new Node.AccessExpression(lhs, rhs);
+	}
+	
+	subparseAssign(lhs: Node.Expression, nmp: number) {
+		if(lhs instanceof Node.Identifier) {
+			return new Node.IdentAssignExpression(
+				lhs, this.parseExpression(nmp)
+			);
+		}
+		else if(lhs instanceof Node.AccessExpression) {
+			return new Node.AccessAssignExpression(
+				lhs.left, lhs.right,
+				this.parseExpression(nmp)
+			);
+		}
+		else if(lhs instanceof Node.CallExpression) {
+			return new Node.CallAssignExpression(
+				lhs.type, lhs.callee, lhs.args,
+				this.parseExpression(nmp)
+			);
+		}
+		else {
+			throw new Error("rvalue in assignment lhs");
+		}
+	}
 
 	parseExpression(minprec: number): Node.Expression {
 		let lhs = this.parseAtom(), op;
 		while(op = this.nextBinaryOperator(minprec)) {
-			let tv = op.token.value;
+			let
+				tv = op.token.value,
+				next_min_prec = op.prec + op.leftassoc;
+			
 			if(Character.isGroupOpen(tv)) {
-				lhs = new Node.CallExpression(
-					tv, lhs, this.parseParameters(tv)
+				lhs = this.subparseCall(tv, lhs);
+			}
+			else if(tv === '.') {
+				lhs = this.subparseAccess(lhs, next_min_prec);
+			}
+			else if(tv === '=') {
+				lhs = this.subparseAssign(lhs, next_min_prec);
+			}
+			else {
+				lhs = new Node.BinaryExpression(
+					op.token.value, lhs,
+					this.parseExpression(next_min_prec)
 				);
-				continue;
 			}
-			
-			let next_min_prec = op.prec + op.leftassoc;
-			
-			if(op.value === '.') {
-				let id = this.matchAny(Token.Identifier);
-				if(id) {
-					lhs = new Node.BinaryExpression(
-						op.token.value, lhs,
-						new Node.Literal(id.value)
-					);
-				}
-			}
-			
-			lhs = new Node.BinaryExpression(
-				op.token.value, lhs,
-				this.parseExpression(next_min_prec)
-			);
 		}
 		
 		return lhs;

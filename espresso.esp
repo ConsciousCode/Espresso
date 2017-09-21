@@ -1,5 +1,18 @@
+"For the time being, strings can be used as comments";
+
 let is_ident(id) {
 	return g_isAlpha(id) or id == "_" or id == "$";
+}
+
+let is_keyword(id) {
+	return
+		id == 'if' or id == 'else' or
+		id == 'try' or id == 'fail' or
+		id == 'while' or id == 'new' or
+		id == 'del' or id == 'var' or
+		id == 'let' or id == 'break' or
+		id == 'continue' or
+		id == 'return' or id == 'this';
 }
 
 var Token = {
@@ -14,18 +27,20 @@ var Lexer = {
 	"new": let(source) {
 		this.source = source;
 		this.pos = 0;
-		this.placeholder = "";
+		this.last = nil;
+		this.placeholder = source[0];
 	},
 	
 	"consume": let() {
 		this.pos = this.pos + 1;
-		return this.placeholder = this.source[this.pos];
+		this.placeholder = this.source[this.pos];
+		return this.placeholder;
 	},
 	"next": let() {
 		return this.placeholder or this.consume();
 	},
 	"eof": let() {
-		return this.pos >= this.placeholder.length;
+		return this.pos >= this.source.length;
 	},
 	
 	"getPosition": let() {
@@ -36,7 +51,7 @@ var Lexer = {
 	
 	"makeToken": let(type, start) {
 		if(this.pos != start.pos) {
-			return new Token(type, this.source.slice(this.pos, start.pos), start);
+			return new Token(type, this.source.slice(start.pos, this.pos), start);
 		}
 		else {
 			return nil;
@@ -98,25 +113,33 @@ var Lexer = {
 		
 		var val = this.source.slice(start.pos, this.pos);
 		
-		return new Token(
+		var type = (
 			if(is_keyword(val)) "keyword"
+			else if(val == "and") "punctuator"
+			else if(val == "or") "punctuator"
 			else if(val == "nil") "nil"
 			else if(val == "true" or val == "false") "bool"
-			else "identifier",
-			val, start
+			else "identifier"
 		);
+		
+		return this.makeToken(type, start);
 	},
 	
 	"scanPunctuator2": let(start, p) {
 		if(p == "==" or p == "!=" or p == ">=" or p == "<=") {
-			return new Token("punctuator", p, start);
+			this.consume();
+			this.consume();
+			return this.makeToken("punctuator", start);
 		}
 		else {
+			g_print("Not punct 2");
 			return nil;
 		}
 	},
 	
 	"scanPunctuator1": let(start, p) {
+		p = p[0];
+		g_print("here", p);
 		if(
 			p == "+" or p == "-" or p == "*" or p == "/" or
 			p == ":" or p == ";" or p == "." or p == "," or
@@ -125,7 +148,8 @@ var Lexer = {
 			p == "[" or p == "]" or
 			p == "{" or p == "}"
 		) {
-			return new Token("punctuator", p, start);
+			this.consume();
+			return this.makeToken("punctuator", start);
 		}
 		else {
 			return nil;
@@ -143,6 +167,11 @@ var Lexer = {
 	},
 	
 	"lex": let() {
+		if(this.pos == this.last) {
+			fail "Failed to advance position (" + this.pos + ")";
+		}
+		this.last = this.pos;
+		
 		return
 			this.scanSpace() or
 			this.scanNumber() or
@@ -152,3 +181,370 @@ var Lexer = {
 			fail "Unknown token";
 	}
 };
+
+let lex_all(src) {
+	var lex = new Lexer(src), v = [];
+	while(not lex.eof()) {
+		v.push(lex.lex());
+	}
+	
+	return v;
+}
+
+"## Value nodes";
+
+var Identifier = {
+	"new": let(name) {
+		this.name = name;
+	},
+	"visit": let(v) {
+		return v.visit('Identifier', this);
+	}
+};
+
+var This = {
+	"new": let() {}
+	"visit": let(v) {
+		return v.visit("This", this);
+	}
+};
+
+var Literal = {
+	"new": let(value) {
+		this.value = value;
+	},
+	"visit": let(v) {
+		return v.visit("Literal", this);
+	}
+};
+
+var ObjectLiteral = {
+	"new": let(fields) {
+		this.fields = fields;
+	},
+	"visit": let(v) {
+		return v.visit("ObjectLiteral", this);
+	}
+};
+
+var ArrayLiteral = {
+	"new": let(fields) {
+		this.fields = fields;
+	},
+	"visit": let(v) {
+		return v.visit("ArrayLiteral", this);
+	}
+};
+
+var FunctionLiteral = {
+	"new": let(name, args, body) {
+		this.name = name;
+		this.args = args;
+		this.body = body;
+	},
+	"visit": let(v) {
+		return v.visit("FunctionLiteral", this);
+	}
+}
+
+"## Operations";
+
+var Unary = {
+	"new": let(value) {
+		this.value = value;
+	},
+	"visit": let(v) {
+		return v.visit("Unary", this);
+	}
+};
+
+var Binary = {
+	"new": let(lhs, rhs) {
+		this.value = value;
+	},
+	"visit": let(v) {
+		return v.visit("Binary", this);
+	}
+};
+
+var Group = {
+	"new": let(elems) {
+		this.elems = elems;
+	},
+	"visit": let(v) {
+		return v.visit("Group", this);
+	}
+};
+
+"## Calling";
+
+var Return = {
+	"new": let(value) {
+		this.value = value;
+	},
+	"visit": let(v) {
+		return v.visit("Return", this);
+	}
+};
+
+var Call = {
+	"new": let(callee, args) {
+		this.callee = callee;
+		this.args = args;
+	},
+	"visit": let(v) {
+		return v.visit("Call", this);
+	}
+};
+
+var Method = {
+	"new": let(obj, method, args) {
+		this.obj = obj;
+		this.method = method;
+		this.args = args;
+	},
+	"visit": let(v) {
+		return v.visit("Method", this);
+	}
+};
+
+var New = {
+	"new": let(proto, args) {
+		this.proto = proto;
+		this.args = args;
+	},
+	"visit": let(v) {
+		return v.visit("New", this);
+	}
+};
+
+"## Access";
+
+var Access = {
+	"new": let(lhs, rhs) {
+		this.lhs = lhs;
+		this.rhs = rhs;
+	}.
+	"visit": let(v) {
+		return v.visit("Access", this);
+	}
+};
+
+"## Assignment";
+
+var IdentAssign = {
+	"new": let(lhs, rhs) {
+		this.lhs = lhs;
+		this.rhs = rhs;
+	},
+	"visit": let(v) {
+		return v.visit("IdentAssign", this);
+	}
+};
+
+var AccessAssign = {
+	"new": let(lhs, rhs) {
+		this.lhs = lhs;
+		this.rhs = rhs;
+	},
+	"visit": let(v) {
+		return v.visit("AccessAssign", this);
+	}
+};
+
+var CallAssign = {
+	"new": let(callee, args) {
+		this.callee = callee;
+		this.args = args;
+	},
+	"visit": let(v) {
+		return v.visit("CallAssign", this);
+	}
+};
+
+var While = {
+	"new": let(test, body) {
+		this.test = test;
+		this.body = body;
+	},
+	"visit": let(v) {
+		return v.visit("While", this);
+	}
+};
+
+var IfChain = {
+	"new": let(chain, alt) {
+		this.chain = chain;
+		this.alt = alt;
+	},
+	"visit": let(v) {
+		return v.visit("IfChain", this);
+	}
+};
+
+"## Variables";
+
+var VariableDeclaration = {
+	"new": let(decl) {
+		this.decl = decl;
+	},
+	"visit": let(v) {
+		return v.visit("VariableDeclaration", this);
+	}
+};
+
+var UNARYOPS = {
+	"+": 0x40, '-': 0x40,
+	"!": 0x41, 'not': 0x41,
+
+	"::": 0xa0
+};
+
+var BINARYOPS = {
+	';': 0x00,
+	'=': 0x01,
+
+	'or': 0x10,
+	'and': 0x11,
+
+	"<": 0x20, "<=": 0x20,
+	">": 0x20, ">=": 0x20,
+	"==": 0x20, "!=": 0x20,
+
+	'+': 0x30, '-': 0x30,
+	'*': 0x31, '/': 0x31,
+
+	"(": 0xa0, "[": 0xa0, "{": 0xa0,
+
+	'.': 0xb1
+};
+
+var RIGHTOPS = [';', "(", '[', "{"];
+
+let isRightAssoc(v) {
+	return v == ';' or v == "(" or v == "[" or v == "{";
+}
+
+var Parser = {
+	"new": let(src) {
+		this.src = src;
+		this.lex = new Lexer(src);
+		this.lookahead = this.lex.lex();
+	},
+	
+	"nextBinaryOperator": let(minprec) {
+		var tok =
+			this.matchAny(PUNCT) or
+			this.matchAny(GROUP_OPEN);
+
+		if(tok) {
+			let op = BINARYOPS[tok.value];
+
+			if(op == nil) {
+				return nil;
+			}
+
+			this.consumeToken();
+			return {
+				"token": tok, "prec": op,
+				"leftassoc": isRightAssoc(tok.value)
+			};
+		}
+
+		return null;
+	}
+	
+	subparseCall(open: string, lhs: Node.Expression) {
+		let params = this.parseParameters(open);
+		
+		if(lhs instanceof Node.AccessExpression) {
+			return new Node.MethodCallExpression(
+				open, lhs.left, lhs.right, params
+			);
+		}
+		else {
+			return new Node.CallExpression(
+				open, lhs, params
+			);
+		}
+	}
+
+	subparseAccess(lhs: Node.Expression, nmp: number) {
+		let id = this.matchAny(Token.Identifier), rhs;
+		if(id) {
+			this.consumeToken();
+			rhs = new Node.Literal(id.value);
+		}
+		else {
+			rhs = this.parseExpression(nmp);
+		}
+		
+		return new Node.AccessExpression(lhs, rhs);
+	}
+	
+	subparseAssign(lhs: Node.Expression, nmp: number) {
+		if(lhs instanceof Node.Identifier) {
+			return new Node.IdentAssignExpression(
+				lhs, this.parseExpression(nmp)
+			);
+		}
+		else if(lhs instanceof Node.AccessExpression) {
+			return new Node.AccessAssignExpression(
+				lhs.left, lhs.right,
+				this.parseExpression(nmp)
+			);
+		}
+		else if(lhs instanceof Node.CallExpression) {
+			return new Node.CallAssignExpression(
+				lhs.type, lhs.callee, lhs.args,
+				this.parseExpression(nmp)
+			);
+		}
+		else {
+			throw new Error("rvalue in assignment lhs");
+		}
+	}
+	
+	"parseExpression": let() {
+		var lhs = this.parseAtom(), op;
+		
+		while(op = this.nextBinaryOperator(minprec)) {
+			var tv = op.token.value;
+			var nmp = op.prec + op.leftassoc;
+			
+			if(isGroupOpen(tv)) {
+				lhs = this.subparseCall(tv, lhs);
+			}
+			else if(tv == '.') {
+				lhs = this.subparseAccess(lhs, nmp);
+			}
+			else if(tv == '=') {
+				lhs = this.subparseAssign(lhs, nmp);
+			}
+			else {
+				lhs = new Binary(
+					tv, lhs, this.parseExpression(nmp);
+				);
+			}
+		}
+		
+		return lhs;
+	},
+	"parseStatement": let() {
+		return this.parseExpression(BINARYOPS[';'] + 1);
+	},
+	"parse": let() {
+		var sub = [];
+		while(true) {
+			while(this.matchPunct(';')) {
+				this.consumeToken();
+			}
+			
+			if(this.eof()) {
+				break;
+			}
+			
+			sub.push(this.parseStatement());
+		}
+	}
+}

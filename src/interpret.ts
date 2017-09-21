@@ -13,225 +13,265 @@ function visit(n, v) {
 	}
 }
 
-export class Scope {
-	valuestack: any[];
+export class SymbolTable {
 	vars: object;
-	blocktype: string;
 	
-	constructor(v?: object) {
-		this.valuestack = [];
-		this.vars = v||{};
+	constructor(v: object = {}) {
+		this.vars = v;
 	}
 	
-	deref(v) {
-		return this.vars[v];
+	deref(k: string): any {
+		return this.vars[k];
 	}
 	
-	assign(k, v) {
+	assign(k: string, v: any): any {
 		return this.vars[k] = v;
-	}
-	
-	push(v) {
-		return this.valuestack.push(v);
-	}
-	
-	pop() {
-		return this.valuestack.pop();
-	}
-}
-
-export class CallFrame {
-	scope: Scope[];
-	
-	constructor() {
-		this.scope = [new Scope()];
-	}
-	
-	deref(v) {
-		for(let i = this.scope.length - 1; i >= 0; --i) {
-			let x = this.scope[i].deref(v);
-			if(typeof x !== 'undefined') {
-				return x;
-			}
-		}
-		
-		return;
-	}
-	
-	assign(k, v) {
-		return this.scope[this.scope.length - 1].assign(k, v);
-	}
-	
-	push(v) {
-		return this.scope[this.scope.length - 1].push(v);
-	}
-	
-	pop() {
-		return this.scope[this.scope.length - 1].pop();
 	}
 }
 
 class EspFunction {
-	name: Node.Identifier;
+	name: string;
 	defs: Node.FunctionParameter[];
 	body: Node.Expression;
 	
-	frame: CallFrame;
-	
-	constructor(name, defs, body, frame) {
+	constructor(name: string, defs, body) {
 		this.name = name;
 		this.defs = defs;
 		// Add an extra return to normalize execution
 		this.body = new Node.ReturnExpression(body);
-		
-		this.frame = frame;
 	}
 	
-	call(env: Interpreter, self, args) {
+	call(env: Interpreter, self: any, args: any[]): any {
 		if(args.length != this.defs.length) {
 			throw new Error("Argument length mismatch");
 		}
 		
-		// Load the lexical scope
-		env.callstack.push(this.frame);
-		
-		env.callstack.push(new CallFrame());
-		env.assign('this', self);
 		for(let i = 0; i < args.length; ++i) {
 			env.assign(this.defs[i].id.name, args[i]);
 		}
 		
-		// Unload the lexical scope
-		env.callstack.pop();
+		env.visit(this.body);
 		
-		return env.visit(this.body);
+		return env.ret;
 	}
 }
 
 class EspNativeFunction {
-	name: Node.Identifier;
+	name: string;
 	func: Function;
 	
-	constructor(func: Function) {
-		this.name = new Node.Identifier("<native>");
+	constructor(name: string, func: Function) {
+		this.name = name;
 		this.func = func;
 	}
 	
-	call(env: Interpreter, self, args) {
-		return this.func.call(self, args);
+	call(env: Interpreter, self: any, args: Node.Expression[]): any {
+		return env.ret = this.func.call(self, args);
 	}
 }
 
 const nil = null;
 
-function prototype(proto, fields) {
-	let value = Object.create(proto);
-	for(let k in fields) {
-		value[k] = fields[k];
-	}
-	return value;
-}
-
 const esp_globals = {
-	g_isAlpha: new EspNativeFunction(function(args) {
-		return /[a-z]+/i.test(args[0]);
-	}),
-	g_isDigit: new EspNativeFunction(function(args) {
-		return /\d+/.test(args[0]);
-	}),
-	object: new EspNativeFunction(function(args) {
-		return args;
-	})
+	g_isAlpha: new EspNativeFunction(
+		"g_isAlpha", function(args) {
+			// test coerces objects into strings >:(
+			if(typeof args[0] !== 'string') {
+				return false;
+			}
+			return /[a-z]+/i.test(args[0]);
+		}
+	),
+	g_isDigit: new EspNativeFunction(
+		"g_isDigit", function(args) {
+			if(typeof args[0] !== 'string') {
+				return false;
+			}
+			return /\d+/.test(args[0]);
+		}
+	),
+	g_isSpace: new EspNativeFunction(
+		"g_isSpace", function(args) {
+			if(typeof args[0] !== 'string') {
+				return false;
+			}
+			return /\s+/.test(args[0]);
+		}
+	),
+	g_print: new EspNativeFunction(
+		"g_print", function(args) {
+			console.log.apply(console.log, args);
+			return nil;
+		}
+	)
 };
+
+export class CallFrame {
+	name: string;
+	args: any[];
+	
+	local: SymbolTable;
+	self: any;
+	
+	constructor(self, name: string, args: any[]) {
+		this.name = name;
+		this.args = args;
+		this.local = new SymbolTable();
+		this.self = self;
+	}
+	
+	deref(k: string): any {
+		if(k === 'this') {
+			return this.self;
+		}
+		
+		return this.local.deref(k);
+	}
+	
+	assign(k: string, v: any): any {
+		if(k === 'this') {
+			throw new Error("Cannot assign to this");
+		}
+		
+		return this.local.assign(k, v);
+	}
+}
 
 export class Interpreter {
 	callstack: CallFrame[];
+	global: SymbolTable;
+	skip: boolean;
+	ret: any;
 	
 	constructor() {
 		this.callstack = [];
+		this.global = new SymbolTable();
+		for(let name in esp_globals) {
+			this.global.assign(name, esp_globals[name]);
+		}
+		
+		this.skip = false;
+		this.ret = null;
 	}
 	
 	visit(n) {
-		return visit(n, this);
+		if(!this.skip) {
+			return visit(n, this);
+		}
 	}
 	
 	exec(v) {
-		// Global call frame for scope
-		this.callstack.push(new CallFrame());
-		for(let name in esp_globals) {
-			this.assign(name, esp_globals[name]);
-		}
 		return this.visit(v);
 	}
 	
-	top() {
-		return this.callstack[this.callstack.length - 1];
-	}
-	
-	deref(name: string) {
-		let v = this.top().deref(name);
-		if(typeof v === 'undefined') {
-			throw new Error(`${name} is not defined`);
+	deref(name: string): any {
+		if(this.callstack.length) {
+			let v = this.callstack[this.callstack.length - 1].deref(name);
+			
+			if(typeof v === 'undefined') {
+				/* fall through */
+			}
+			else {
+				return v;
+			}
 		}
 		
-		return v;
+		return this.global.deref(name);
 	}
 	
-	assign(name: string, value) {
-		return this.top().assign(name, value);
+	assign(name: string, value: any): any {
+		if(this.callstack.length) {
+			return this.callstack[this.callstack.length - 1].assign(name, value);
+		}
+		else {
+			return this.global.assign(name, value);
+		}
 	}
 	
-	Identifier(n) {
+	pushcall(self: any, name: string, args: any[]) {
+		this.callstack.push(new CallFrame(self, name, args));
+	}
+	
+	popcall() {
+		if(this.callstack.length) {
+			this.callstack.pop();
+		}
+		else {
+			throw new Error("Attempted to pop global scope");
+		}
+	}
+	
+	Identifier(n: Node.Identifier) {
 		return this.deref(n.name);
 	}
 	
-	Break(n) {
+	BreakExpression(n: Node.BreakExpression) {
 		throw new Error("Not implemented: Break");
 	}
 	
-	Continue(n) {
+	ContinueExpression(n: Node.ContinueExpression) {
 		throw new Error("Not implemented: Continue");
 	}
 	
-	ReturnExpression(n) {
-		let val = this.visit(n.argument);
-		this.callstack.pop();
-		return val;
+	ReturnExpression(n: Node.ReturnExpression) {
+		if(this.callstack.length < 1) {
+			throw new Error("Attempting to return from global context");
+		}
+		
+		let v = this.visit(n.argument);
+		
+		if(!this.skip) {
+			this.skip = true;
+			return this.ret = v;
+		}
 	}
 	
-	FailExpression(n) {
+	FailExpression(n: Node.FailExpression) {
 		let val = this.visit(n.argument);
 		throw val;
 	}
 	
-	Literal(n) {
+	Literal(n: Node.Literal) {
 		return n.value;
 	}
 	
-	NewExpression(n) {
-		let
-			proto = this.visit(n.callee),
-			self = Object.create(proto);
-		
-		proto['new'].call(
-			this, self,
-			n.arguments.map(v => this.visit(v))
-		);
-		
-		return self;
-	}
-	
-	ThisExpression(n) {
+	ThisExpression(n: Node.ThisExpression) {
 		return this.deref('this');
 	}
 	
-	CallExpression(n) {
+	NewExpression(n: Node.NewExpression) {
+		let
+			proto = this.visit(n.callee),
+			self = Object.create(proto),
+			args = n.arguments.map(v => this.visit(v));
+		
+		this.pushcall(self, "<new>", args);
+		proto['new'].call(this, self, args);
+		this.popcall();
+		
+		this.skip = false;
+		return self;
+	}
+	
+	CallExpression(n: Node.CallExpression) {
 		let
 			callee = this.visit(n.callee),
 			args = n.args.map(v => this.visit(v));
 		
 		if(n.type === '(') {
-			return callee.call(this, nil, args);
+			this.pushcall(nil, callee.name, args);
+			
+			if(callee instanceof Function) {
+				this.ret = callee.apply(null, args);
+			}
+			else {
+				callee.call(this, nil, args);
+			}
+			
+			this.popcall();
+			
+			this.skip = false;
+			return this.ret;
 		}
 		else if(n.type === '[') {
 			if(args.length > 1) {
@@ -244,7 +284,38 @@ export class Interpreter {
 		}
 	}
 	
-	UnaryExpression(n) {
+	MethodCallExpression(n: Node.MethodCallExpression) {
+		let
+			self = this.visit(n.self),
+			callee = this.visit(n.callee),
+			args = n.args.map(v => this.visit(v));
+		
+		if(n.type === '(') {
+			let func = self[callee];
+			
+			this.pushcall(self, func.name, args);
+			
+			if(func instanceof Function) {
+				this.ret = func.apply(self, args);
+			}
+			else {
+				self[callee].call(this, self, args);
+			}
+			
+			this.popcall();
+			
+			this.skip = false;
+			return this.ret;
+		}
+		else if(n.type == '[') {
+			return self[callee][args[0]];
+		}
+		else if(n.type === "{") {
+			throw new Error("{} method call");
+		}
+	}
+	
+	UnaryExpression(n: Node.UnaryExpression) {
 		let val = this.visit(n.argument);
 		
 		switch(n.operator) {
@@ -255,66 +326,38 @@ export class Interpreter {
 		}
 	}
 	
-	Group(n) {
-		let last;
+	Group(n: Node.Group) {
+		let last = nil;
 		for(let e of n.elems) {
 			if(e) {
 				last = this.visit(e);
 			}
 			else {
-				last = nil;
+				//last = nil;
 			}
 		}
 		
 		return last;
 	}
 	
-	BinaryExpression(n) {
-		if(n.operator === '=') {
-			// Ordinary usage
-			if(n.left instanceof Node.Identifier) {
-				return this.assign(n.left.name, this.visit(n.right));
+	BinaryExpression(n: Node.BinaryExpression) {
+		// Implement short-circuiting
+		if(n.operator == 'and') {
+			let lhs = this.visit(n.left);
+			if(lhs) {
+				return this.visit(n.right);
 			}
-			// x.y = z
-			else if(n.left instanceof Node.BinaryExpression) {
-				if(n.left.operator === '.') {
-					// Decompose x.y = z
-					return this.visit(n.left.left)[
-						this.visit(n.left.right)
-					] = this.visit(n.right);
-				}
-				
-				// Only . operator can be used here, default to error
+			return lhs;
+		}
+		else if(n.operator == 'or') {
+			let lhs = this.visit(n.left);
+			if(lhs) {
+				return lhs;
 			}
-			// x[y] = z
-			else if(n.left instanceof Node.CallExpression) {
-				return this.visit(n.left)['='].call(
-					this, this.visit(n.left.callee), [
-						n.left.arguments.map(
-							v => this.visit(v)
-						), this.visit(n.right)
-					]
-				)
-			}
-			
-			throw new Error("rvalue in lhs of assignment");
+			return this.visit(n.right);
 		}
 		
-		let lhs = this.visit(n.left), rhs: any;
-		
-		if(n.operator === '.') {
-			if(n.right instanceof Node.Identifier) {
-				rhs = n.right.name;
-			}
-			else {
-				rhs = this.visit(n.right);
-			}
-			
-			return lhs[rhs];
-		}
-		else {
-			rhs = this.visit(n.right);
-		}
+		let lhs = this.visit(n.left), rhs = this.visit(n.right);
 		
 		switch(n.operator) {
 			case "+": return lhs + rhs;
@@ -327,19 +370,55 @@ export class Interpreter {
 			case ">=": return lhs >= rhs;
 			case "<": return lhs < rhs;
 			case "<=": return lhs <= rhs;
-			case "==": return lhs == rhs;
-			case "!=": return lhs != rhs;
+			case "==": return lhs === rhs;
+			case "!=": return lhs !== rhs;
 			
+			/*
 			case "or": return lhs || rhs;
 			case "and": return lhs && rhs;
+			*/
 			
 			default:
 				throw new Error(`Unknown binary operator ${n.operator}`);
 		}
 	}
 	
-	FunctionExpression(n) {
-		let f = new EspFunction(n.name, n.defs, n.body, this.top());
+	AccessExpression(n: Node.AccessExpression) {
+		let lhs = this.visit(n.left);
+		if(n.right instanceof Node.Identifier) {
+			return lhs[n.right.name];
+		}
+		else {
+			return lhs[this.visit(n.right)];
+		}
+	}
+	
+	IdentAssignExpression(n: Node.IdentAssignExpression) {
+		return this.assign(n.name.name, this.visit(n.value));
+	}
+	
+	AccessAssignExpression(n: Node.AccessAssignExpression) {
+		return this.visit(n.left)[
+			this.visit(n.right)
+		] = this.visit(n.value);
+	}
+	
+	CallAssignExpression(n: Node.CallAssignExpression) {
+		switch(n.type) {
+			case "(": throw new Error("Call assignment");
+			case '[':
+				// Assumption: arguments of length 1
+				return this.visit(n.callee)[
+					this.visit(n.arguments[0])
+				] = this.visit(n.value);
+			case "{": throw new Error("Brace assignment");
+		}
+	}
+	
+	FunctionExpression(n: Node.FunctionExpression) {
+		let f = new EspFunction(
+			n.name?n.name.name : "<anon>", n.defs, n.body
+	);
 		
 		if(n.name) {
 			this.assign(n.name.name, f);
@@ -347,7 +426,7 @@ export class Interpreter {
 		return f;
 	}
 	
-	WhileExpression(n) {
+	WhileExpression(n: Node.WhileExpression) {
 		while(this.visit(n.test)) {
 			this.visit(n.body);
 		}
@@ -355,31 +434,38 @@ export class Interpreter {
 		return nil;
 	}
 	
-	IfChain(n) {
+	IfChain(n: Node.IfChain) {
 		for(let ic of n.clauses) {
 			if(this.visit(ic.test)) {
 				return this.visit(ic.body);
 			}
 		}
 		
-		return this.visit(n.alt.body);
+		if(n.alt) {
+			return this.visit(n.alt.body);
+		}
+		
+		return nil;
 	}
 	
-	TryExpression(n) {
+	TryExpression(n: Node.TryExpression) {
 		throw new Error("No try implementation");
 	}
 	
-	VariableDeclaration(n) {
+	VariableDeclaration(n: Node.VariableDeclaration) {
+		let last;
 		for(let decl of n.declarations) {
 			let init = this.visit(decl.init);
 			if(init === null) {
 				init = nil;
 			}
-			this.assign(decl.name.name, init);
+			last = this.assign(decl.name.name, init);
 		}
+		
+		return last;
 	}
 	
-	ObjectLiteral(n) {
+	ObjectLiteral(n: Node.ObjectLiteral) {
 		let val = {};
 		for(let p of n.entries) {
 			val[this.visit(p.name)] = this.visit(p.value);
@@ -388,7 +474,7 @@ export class Interpreter {
 		return val;
 	}
 	
-	ArrayLiteral(n) {
+	ArrayLiteral(n: Node.ArrayLiteral) {
 		return n.values.map(v => this.visit(v));
 	}
 }

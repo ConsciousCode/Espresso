@@ -1,0 +1,35 @@
+struct Object {
+	Object* prototype;
+	map<string, Object*> slots;
+	list<Object*> array;
+}
+
+Global
+Scoped (only in one function)
+Unique (maintains one reference with transferred ownership)
+Shared (arbitrary number of references)
+
+nil
+bool
+int
+real
+array
+object
+mixed
+let
+
+(type $esp (struct (field i32)))
+(type $nil (extends $esp))
+(type $bool (struct (extends $esp) (field i32)))
+(type $int (struct (extends $esp) (field i64)))
+(type $real (struct (extends $esp) (field f64)))
+(type $array (struct (extends $esp)
+	(field (array (type $esp)))))
+(type $object (struct (extends $esp)
+	(field $keys (array (type $string)))
+	(field $vals (array (type $esp)))))
+(type $mixed (extends $esp)
+	(field $o (type $object)))
+	(field $a (type $array)))
+(type $let (extends $esp)
+	)

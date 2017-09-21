@@ -2,11 +2,11 @@ export type Expression = (
 	Literal|Identifier|
 	BreakExpression|ContinueExpression|
 	ReturnExpression|FailExpression|
-	NewExpression|ThisExpression|CallExpression|
+	NewExpression|ThisExpression|CallExpression|MethodCallExpression|
 	UnaryExpression|BinaryExpression|
 	Group|FunctionExpression|
 	WhileExpression|IfChain|TryExpression|
-	VariableDeclaration
+	VariableDeclaration|AssignExpression|AccessExpression
 );
 
 export class Identifier {
@@ -129,6 +129,20 @@ export class CallExpression {
 	}
 }
 
+export class MethodCallExpression {
+	readonly type: string;
+	readonly self: Expression;
+	readonly callee: Expression;
+	readonly args: Expression[];
+
+	constructor(type: string, self: Expression, callee: Expression, args: Expression[]) {
+		this.type = type;
+		this.self = self;
+		this.callee = callee;
+		this.args = args;
+	}
+}
+
 export class UnaryExpression {
 	readonly operator: string;
 	readonly argument: Expression;
@@ -173,33 +187,7 @@ export class BinaryExpression {
 	}
 }
 
-/**
- * The access or dot operator needs special handling. It
- *  can have one of two forms; identifier and operation.
- *  Identifier is the ordinary usage in most other
- *  languages, making this a special-case operator with an
- *  identifier in the rhs. As an operator however, the
- *  rhs can be an expression (e.g. x.("y")). This is
- *  grammatically unambiguous, but encodes two separate
- *  cases in the AST with overlap. That is, x.y is
- *  grammatically the same as x.(y), but means something
- *  different.
-**/
 export class AccessExpression {
-	readonly left: Expression;
-	readonly right: Identifier;
-	
-	constructor(left: Expression, right: Identifier) {
-		this.left = left;
-		this.right = right;
-	}
-	
-	toString() {
-		return `(${this.left}.${this.right})`;
-	}
-}
-
-export class AssignExpression {
 	readonly left: Expression;
 	readonly right: Expression;
 	
@@ -207,11 +195,45 @@ export class AssignExpression {
 		this.left = left;
 		this.right = right;
 	}
+}
+
+export class IdentAssignExpression {
+	readonly name: Identifier;
+	readonly value: Expression;
 	
-	toString() {
-		return `(${this.left} := ${this.right})`;
+	constructor(name: Identifier, value: Expression) {
+		this.name = name;
+		this.value = value;
 	}
 }
+
+export class AccessAssignExpression {
+	readonly left: Expression;
+	readonly right: Expression;
+	readonly value: Expression;
+	
+	constructor(left: Expression, right: Expression, value: Expression) {
+		this.left = left;
+		this.right = right;
+		this.value = value;
+	}
+}
+
+export class CallAssignExpression {
+	readonly type: string;
+	readonly callee: Expression;
+	readonly arguments: Expression[];
+	readonly value: Expression;
+	
+	constructor(type: string, callee: Expression, args: Expression[], value: Expression) {
+		this.type = type;
+		this.callee = callee;
+		this.arguments = args;
+		this.value = value;
+	}
+}
+
+export type AssignExpression = IdentAssignExpression | AccessAssignExpression | CallAssignExpression;
 
 export class FunctionParameter {
 	readonly id: Identifier;

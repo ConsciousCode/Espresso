@@ -12,6 +12,7 @@
 		"nodes.ts",
 		"parser.ts",
 		"espresso.ts",
-		"interpret.ts"
+		"interpret.ts",
+		"transpile.ts"
 	]
 }

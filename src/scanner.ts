@@ -262,24 +262,30 @@ export class Scanner {
 		return this.makeToken(Token.Punctuator, pos);
 	}
 
-	scanDecimalLiteral(): RawToken|null {
-		let num = '', pos = this.getPosition(), ch;
-
-		while(!this.eof() && /\d/.test(ch = this.next())) {
-			num += ch;
-			this.consume();
-		}
+	scanNumericLiteral(): RawToken|null {
+		let pos = this.getPosition(), ch = this.next();
 		
-		if(this.index == pos.start) {
-			return null;
+		if(ch == '0') {
+			if(this.consume() != 'x') {
+				throw this.scanError("Missed hex 0x");
+			}
+			ch = this.consume();
+			
+			while(!this.eof() && /[a-f\d]/i.test(ch)) {
+				ch = this.consume();
+				console.log(ch);
+			}
 		}
 		else {
-			return this.makeToken(Token.NumericLiteral, pos);
+			while(!this.eof() && /\d/.test(ch)) {
+				ch = this.consume();
+			}
 		}
-	}
-
-	scanNumericLiteral(): RawToken|null {
-		return this.scanDecimalLiteral();
+		
+		let tok = this.makeToken(Token.NumericLiteral, pos);
+		
+		tok.value = parseInt(tok.value).toString();
+		return tok;
 	}
 
 	scanStringLiteral(): RawToken|null {

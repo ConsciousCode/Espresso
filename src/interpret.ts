@@ -1,17 +1,5 @@
 import * as Node from './nodes';
-
-function visit(n, v) {
-	if(n) {
-		let name = n.__proto__.constructor.name;
-		
-		if(v[name]) {
-			return v[name](n);
-		}
-		else {
-			throw new Error(`Not implemented: ${name}`)
-		}
-	}
-}
+import { Visitor, visit } from "./visitor";
 
 export class SymbolTable {
 	vars: object;
@@ -137,7 +125,7 @@ export class CallFrame {
 	}
 }
 
-export class Interpreter {
+export class Interpreter implements Visitor {
 	callstack: CallFrame[];
 	global: SymbolTable;
 	skip: boolean;

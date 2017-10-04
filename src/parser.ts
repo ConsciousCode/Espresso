@@ -546,7 +546,6 @@ export class Parser {
 	}
 
 	parseAtom() {
-		let start = this.scanner.index;
 		let tok = this.nextToken(), val, op;
 
 		this.consumeToken();

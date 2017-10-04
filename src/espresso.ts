@@ -26,6 +26,7 @@ import { Parser } from './parser';
 import { Token } from './token';
 import { Scanner } from './scanner';
 import { Interpreter } from './interpret';
+import { Transpiler } from './transpile';
 
 export function parse(code: string) {
 	return new Parser(code).parseScript();
@@ -33,6 +34,10 @@ export function parse(code: string) {
 
 export function exec(code: string) {
 	return new Interpreter().exec(parse(code));
+}
+
+export function transpile(code: string) {
+	return new Transpiler().generate(parse(code));
 }
 
 export function tokenStream(code: string) {

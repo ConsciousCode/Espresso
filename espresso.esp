@@ -203,7 +203,7 @@ var Identifier = {
 };
 
 var This = {
-	"new": let() {}
+	"new": let() {},
 	"visit": let(v) {
 		return v.visit("This", this);
 	}
@@ -324,7 +324,7 @@ var Access = {
 	"new": let(lhs, rhs) {
 		this.lhs = lhs;
 		this.rhs = rhs;
-	}.
+	},
 	"visit": let(v) {
 		return v.visit("Access", this);
 	}
@@ -419,10 +419,16 @@ var BINARYOPS = {
 	'.': 0xb1
 };
 
-var RIGHTOPS = [';', "(", '[', "{"];
-
 let isRightAssoc(v) {
 	return v == ';' or v == "(" or v == "[" or v == "{";
+}
+
+let token_type(v, type) {
+	return v.visit({
+		"visit": let(t, value) {
+			return t == type;
+		}
+	});
 }
 
 var Parser = {
@@ -432,10 +438,63 @@ var Parser = {
 		this.lookahead = this.lex.lex();
 	},
 	
+	"parseAtom": let() {
+		var start = this.lex.index;
+		let tok = this.nextToken(), val, op;
+
+		this.consumeToken();
+
+		switch(tok.type) {
+			case Token.BooleanLiteral:
+				return new Node.Literal(tok.value === 'true');
+			case Token.NilLiteral:
+				return new Node.Literal(null);
+			case Token.NumericLiteral:
+				return new Node.Literal(parseInt(tok.value));
+			case Token.StringLiteral:
+				return new Node.Literal(tok.value);
+
+			case Token.Keyword:
+				switch(tok.value) {
+					case 'if': return this.parseIfExpression();
+					case 'var': return this.parseVarDeclaration('var');
+					case 'while': return this.parseWhileExpression();
+					case 'let': return this.parseFunctionExpression();
+					case 'return': return this.parseReturnExpression();
+					case 'fail':
+						return new Node.FailExpression(
+							this.parseStatement()
+						);
+					case 'new': return this.parseNewExpression();
+					case 'this': return new Node.ThisExpression();
+					
+					default:
+						throw this.unexpectedToken(tok);
+				}
+			
+			case Token.GroupOpen:
+				return this.parseGroup(tok.value);
+
+			case Token.Identifier:
+				return new Node.Identifier(tok.value);
+			
+			case Token.Punctuator:
+				op = UNARYOPS[tok.value];
+				if(op) {
+					return new Node.UnaryExpression(
+						tok.value, this.parseExpression(op)
+					)
+				}
+			//... Fallthrough
+				
+			default:
+				throw this.unexpectedToken(tok);
+	},
+	
 	"nextBinaryOperator": let(minprec) {
 		var tok =
-			this.matchAny(PUNCT) or
-			this.matchAny(GROUP_OPEN);
+			this.matchAny("PUNCT") or
+			this.matchAny("GROUP_OPEN");
 
 		if(tok) {
 			let op = BINARYOPS[tok.value];
@@ -451,60 +510,56 @@ var Parser = {
 			};
 		}
 
-		return null;
-	}
-	
-	subparseCall(open: string, lhs: Node.Expression) {
-		let params = this.parseParameters(open);
+		return nil;
+	},
+	"subparseCall": let(open, lhs) {
+		var params = this.parseParameters(open);
 		
-		if(lhs instanceof Node.AccessExpression) {
-			return new Node.MethodCallExpression(
+		if(token_type(lhs, "Access")) {
+			return new MethodCall(
 				open, lhs.left, lhs.right, params
 			);
 		}
 		else {
-			return new Node.CallExpression(
+			return new Call(
 				open, lhs, params
 			);
 		}
-	}
-
-	subparseAccess(lhs: Node.Expression, nmp: number) {
-		let id = this.matchAny(Token.Identifier), rhs;
+	},
+	"subparseAccess": let(lhs, nmp) {
+		var id = this.matchAny("IDENT"), rhs;
 		if(id) {
 			this.consumeToken();
-			rhs = new Node.Literal(id.value);
+			rhs = new Literal(id.value);
 		}
 		else {
 			rhs = this.parseExpression(nmp);
 		}
 		
-		return new Node.AccessExpression(lhs, rhs);
-	}
-	
-	subparseAssign(lhs: Node.Expression, nmp: number) {
-		if(lhs instanceof Node.Identifier) {
-			return new Node.IdentAssignExpression(
+		return new Access(lhs, rhs);
+	},
+	"subparseAssign": let(lhs, nmp) {
+		if(token_type(lhs, "Identifier")) {
+			return new IdentAssign(
 				lhs, this.parseExpression(nmp)
 			);
 		}
-		else if(lhs instanceof Node.AccessExpression) {
-			return new Node.AccessAssignExpression(
+		else if(token_type(lhs, "Access")) {
+			return new AccessAssign(
 				lhs.left, lhs.right,
 				this.parseExpression(nmp)
 			);
 		}
-		else if(lhs instanceof Node.CallExpression) {
-			return new Node.CallAssignExpression(
+		else if(token_type(lhs, "CallAssign")) {
+			return new CallAssign(
 				lhs.type, lhs.callee, lhs.args,
 				this.parseExpression(nmp)
 			);
 		}
 		else {
-			throw new Error("rvalue in assignment lhs");
+			fail "rvalue in assignment lhs";
 		}
-	}
-	
+	},
 	"parseExpression": let() {
 		var lhs = this.parseAtom(), op;
 		

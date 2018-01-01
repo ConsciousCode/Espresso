@@ -1,0 +1,268 @@
+{
+    "comment": "JavaScript Syntax:  version 0.1",
+    "fileTypes": [ "esp", "espresso" ],
+    "firstLineMatch": "^#!.*\\b(esp(resso)?)",
+    "keyEquivalent": "^~J",
+    "name": "Espresso",
+    "patterns": [
+        {
+            "captures": {
+                "1": {
+                    "name": "punctuation.definition.comment.esp"
+                }
+            },
+            "comment": "Match the shebang for JavaScript executables",
+            "match": "\\A(#!).*$\\n",
+            "name": "comment.line.number-sign.shebang.esp"
+        }, {
+            "include": "#numbers"
+        }, {
+            "include": "#strings"
+        }, {
+            "include": "#comments"
+        }, {
+            "include": "#function-call"
+        }, {
+            "include": "#operators"
+        }, {
+            "match": "=>",
+            "name": "storage.type.arrow.esp"
+        }, {
+            "match": "(?<!\\.|\\$)\\b(let|var)\\b(?!\\$)",
+            "name": "storage.type.var.esp"
+        }, {
+            "match": "(?<!\\.|\\$)\\b(get|set|const)\\b(?!\\$)",
+            "name": "storage.modifier.esp"
+        }, {
+            "match": "(?<!\\.|\\$)\\b(async|await|break|case|catch|continue|default|do|else|export|finally|for|if|return|switch|throw|try|while|with)\\b(?!\\$)",
+            "name": "keyword.control.esp"
+        }, {
+            "match": "(?<!\\.|\\$)\\b(delete|in|instanceof|new|typeof)\\b(?!\\$)",
+            "name": "keyword.operator.esp"
+        }, {
+            "match": "(?<!\\.|\\$)\\b(array|boolean|function|int|float|Error|object|string|)\\b(?!\\$)",
+            "name": "support.class.esp"
+        }, {
+            "match": "(?<!\\.|\\$)\\b(parseFloat|parseInt)\\b(?!\\$)",
+            "name": "support.function.esp"
+        }, {
+            "comment": "Keywords reserved for future use but now are unused.",
+            "match": "(?<!\\.|\\$)\\b(enum|await)\\b(?!\\$)",
+            "name": "invalid.illegal.esp"
+        }, {
+            "comment": "Keywords used in an invalid context",
+            "match": "(?<!\\.|\\$)\\b(class|function|static|extends)\\b(?!\\$)",
+            "name": "invalid.illegal.esp"
+        }, {
+            "match": "\\b(true|false|nil|inf)\\b",
+            "name": "constant.language.esp"
+        }, {
+            "match": "(?<!\\.)\\b(super|this)(?!\\s*: )\\b",
+            "name": "variable.language.esp"
+        }, {
+            "match": "\\;",
+            "name": "punctuation.terminator.statement.esp"
+        }, {
+            "comment": "Matches the \"prototype\" keyword.  Even though it is not a valid keyword, it is a special constant of sorts.",
+            "match": "(?<=\\.)(prototype)\\b",
+            "name": "keyword.other.esp"
+        }
+    ],
+    "repository": {
+        "comments": {
+            "patterns": [
+                {
+                    "begin": "\/\\*\\*(?!\/|\\*)",
+                    "beginCaptures": [
+                        {
+                            "name": "punctuation.definition.comment.begin.esp"
+                        }
+                    ],
+                    "end": "\\*\/",
+                    "endCaptures": [
+                        {
+                            "name": "punctuation.definition.comment.end.esp"
+                        }
+                    ]
+                }
+            ]
+        },
+        "numbers": {
+            "patterns": [
+                {
+                    "match": "0[xX]\\h+\\b",
+                    "name": "constant.numeric.hex.esp"
+                }, {
+                    "match": "0[bB][01]+\\b",
+                    "name": "constant.numeric.binary.esp"
+                }, {
+                    "match": "0[oO][0-7]+\\b",
+                    "name": "constant.numeric.octal.esp"
+                }, {
+                    "match": "(\\d+\\.\\d*|\\d*\\.\\d+)([eE][+-]?\\d+)?)",
+                    "name": "constant.numeric.esp"
+                }
+            ]
+        },
+        "operators": {
+            "patterns": [
+                {
+                    "match": "[-+*/%]=",
+                    "name": "keyword.operator.assignment.compound.esp"
+                }, {
+                    "match": "([&^|]|<<|>>)=",
+                    "name": "keyword.operator.assignment.compound.bitwise.esp"
+                }, {
+                    "match": "[!<>=]=|[<>]",
+                    "name": "keyword.operator.comparison.esp"
+                }, {
+                    "match": "[&|]{2}|!",
+                    "name": "keyword.operator.logical.esp"
+                }, {
+                    "match": "[&|~^]",
+                    "name": "keyword.operator.bitwise.esp"
+                }, {
+                    "match": "\\: ",
+                    "name": "keyword.operator.esp"
+                }, {
+                    "match": "!",
+                    "name": "keyword.operator.logical.esp"
+                }, {
+                    "match": "=|\\: ",
+                    "name": "keyword.operator.assignment.esp"
+                }, {
+                    "match": "--",
+                    "name": "keyword.operator.decrement.esp"
+                }, {
+                    "match": "\\+\\+",
+                    "name": "keyword.operator.increment.esp"
+                }
+            ]
+        },
+        "strings": {
+            "patterns": [
+                {
+                    "begin": "'",
+                    "beginCaptures": [
+                        {
+                            "name": "punctuation.definition.string.begin.esp"
+                        }
+                    ],
+                    "end": "'",
+                    "endCaptures": [
+                        {
+                            "name": "punctuation.definition.string.end.esp"
+                        }
+                    ],
+                    "name": "string.quoted.single.esp",
+                    "patterns": [
+                        {
+                            "include": "#escapes"
+                        }, {
+                            "match": "\\\\\\n",
+                            "name": "constant.character.escape.newline.esp"
+                        }, {
+                            "match": "\\n",
+                            "name": "invalid.illegal.character-not-allowed-here.esp"
+                        }
+                    ]
+                }, {
+                    "begin": "\"",
+                    "beginCaptures": [
+                        {
+                            "name": "punctuation.definition.string.begin.esp"
+                        }
+                    ],
+                    "end": "\"",
+                    "endCaptures": [
+                        {
+                            "name": "punctuation.definition.string.end.esp"
+                        }
+                    ],
+                    "name": "string.quoted.double.esp",
+                    "patterns": [
+                        {
+                            "include": "#escapes"
+                        }, {
+                            "match": "\\\\\\n",
+                            "name": "constant.character.escape.newline.esp"
+                        }, {
+                            "match": "\\n",
+                            "name": "invalid.illegal.character-not-allowed-here.esp"
+                        }
+                    ]
+                }, {
+                    "begin": "`",
+                    "beginCaptures": [
+                        {
+                            "name": "punctuation.definition.string.begin.esp"
+                        }
+                    ],
+                    "end": "`",
+                    "endCaptures": [
+                        {
+                            "name": "punctuation.definition.string.end.esp"
+                        }
+                    ],
+                    "name": "string.quoted.other.template.esp",
+                    "patterns": [
+                        {
+                            "include": "#escapes"
+                        }, {
+                            "include": "#interpolation"
+                        }
+                    ]
+                }
+            ],
+            "repository": {
+                "escapes": {
+                    "match": "\\\\(x\\h{2}|[0-2][0-7]{0,2}|3[0-6][0-7]|37[0-7]?|[4-7][0-7]?|.)",
+                    "name": "constant.character.escape.esp"
+                },
+                "interpolation": {
+                    "begin": "\\$\\{",
+                    "beginCaptures": [
+                        {
+                            "name": "punctuation.section.embedded.begin.esp"
+                        }
+                    ],
+                    "contentName": "source.esp",
+                    "end": "(\\})",
+                    "endCaptures": [
+                        {
+                            "name": "punctuation.section.embedded.end.esp"
+                        }, {
+                            "name": "source.esp"
+                        }
+                    ],
+                    "name": "meta.embedded.line.esp",
+                    "patterns": [
+                        {
+                            "begin": "\\{",
+                            "beginCaptures": [
+                                {
+                                    "name": "meta.brace.curly.esp"
+                                }
+                            ],
+                            "end": "\\}",
+                            "endCaptures": [
+                                {
+                                    "name": "meta.brace.curly.esp"
+                                }
+                            ],
+                            "patterns": [
+                                {
+                                    "include": "$self"
+                                }
+                            ]
+                        }, {
+                            "include": "$self"
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    "scopeName": "source.esp",
+    "uuid": "3a447f15-78b4-4d58-8e85-90f6335966fc"
+}

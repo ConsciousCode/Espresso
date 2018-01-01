@@ -49,7 +49,7 @@ var Lexer = {
 		};
 	},
 	
-	"makeToken": let(type, start) {
+	"makeToken": le%t(type, start) {
 		if(this.pos != start.pos) {
 			return new Token(type, this.source.slice(start.pos, this.pos), start);
 		}

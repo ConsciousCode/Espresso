@@ -349,3 +349,95 @@ class CFGBuilder implements Visitor {
 	
 	ArrayLiteral(n: Node.ArrayLiteral);
 }
+
+class Node {
+	uses: Node[];
+	
+	constructor() {
+		this.uses = [];
+	}
+}
+
+class Block extends Node {
+	values: Expression[];
+	next: Flow;
+}
+
+/**
+ * Subclass to avoid confusing expressions and statements
+**/
+class Expression extends Node {}
+
+class Constant extends Expression {
+	value: any;
+	
+	constructor(value: any) {
+		super();
+		this.value = value;
+	}
+}
+
+class UnaryNode extends Expression {
+	operator: string;
+	operand: Expression;
+	
+	constructor(op: string, x: Expression) {
+		super();
+		this.operator = op;
+		this.operand = x;
+	}
+}
+
+class BinaryNode extends Expression {
+	operator: string;
+	lhs: Node;
+	rhs: Node;
+	
+	constructor(op: string, lhs: Expression, rhs: Expression) {
+		super();
+		this.operator = op;
+		this.lhs = lhs;
+		this.rhs = rhs;
+	}
+}
+
+
+class Flow extends Node {}
+
+class JumpFlow extends Flow {
+	readonly type: string;
+	target: Block;
+	
+	constructor(type: string, target: Block) {
+		super();
+		this.type = type;
+		this.target = target;
+	}
+}
+
+class IfFlow extends Flow {
+	cond: Expression;
+	body: Block;
+	alt: Block;
+	
+	constructor(cond: Expression, body: Block, alt: Block) {
+		super();
+		this.cond = cond;
+		this.body = body;
+		this.alt = alt;
+	}
+}
+
+class Phi extends Expression {
+	inputs: Expression[];
+	
+	constructor(inputs: Expression[]) {
+		super();
+		this.inputs = inputs;
+	}
+}
+
+class Block {
+	vars: Expression[];
+	next: Flow;
+}

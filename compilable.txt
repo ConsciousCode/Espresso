@@ -1,0 +1,15 @@
+Things which make espresso compilable
+
+Prototypes are immutable by definition - once a prototype is established, you can be guaranteed that interface (e.g. it's impossible to change the behavior of literals because they use a predefined prototype).
+
+Variable mutation is framed as an extension of prototyping, such that any changes are new objects prototyped by the old state. This is equivalent to pass-by-value, with the added bonus that large objects aren't actually copied.
+
+As a result of the above, closures copy by value rather than reference by default, which makes garbage collection easier (the function owns its free variables)
+
+The scope is 100% static, to the point where you can't even import names from a library implicitly.
+
+No native support for an eval/exec magic function, meaning no requirement for a bundled interpreter.
+
+No native access to the implementation (e.g. nothing like Python's access to bytecode).
+
+Prototype chain doesn't have automatically accessible references, so implementations are expected to combine prototype objects to shorten the chain, as they can lose all explicit references.

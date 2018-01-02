@@ -10,18 +10,19 @@ bool isIdentStart(int c) {
 	return isalpha(c) || c == '$' || c == '_' || c == '?';
 }
 
-Token::Token(TokenType tt, Position ori, bool v):type(tt), origin(ori) {
+Token::Token() {}
+Token::Token(TokenType tt, Position ori, size_t len, bool v):type(tt), origin(ori), length(len) {
 	value.b = v;
 }
-Token::Token(TokenType tt, Position ori, int v):Token(tt, ori, (esp_int)v) {}
-Token::Token(TokenType tt, Position ori, esp_int v):type(tt), origin(ori) {
+Token::Token(TokenType tt, Position ori, size_t len, int v):Token(tt, ori, len, (esp_int)v) {}
+Token::Token(TokenType tt, Position ori, size_t len, esp_int v):type(tt), origin(ori), length(len) {
 	value.i = v;
 }
-Token::Token(TokenType tt, Position ori, Symbol v):type(tt), origin(ori) {
+Token::Token(TokenType tt, Position ori, size_t len, Symbol v):type(tt), origin(ori), length(len) {
 	value.sym = v;
 }
 
-Lexer::Lexer(const char* code):lookahead(TT_NONE, {0}, TK_NONE) {
+Lexer::Lexer(const char* code) {
 	pos.code = code;
 	pos.cur = code;
 	pos.line = 1;
@@ -39,10 +40,12 @@ bool Lexer::nextToken() {
 	auto tt = lookahead.type;
 	
 	if(tt == TT_NONE || tt == TT_ERROR) {
-		return consumeToken();
+		return false;
 	}
 	else {
-		return false;
+		auto tok = consumeToken();
+		cout << "NEXT " << lookahead.type << " " <<  std::string(lookahead.origin.cur) << std::endl;
+		return tok;
 	}
 }
 
@@ -95,7 +98,7 @@ void Lexer::ignoreSpace() {
 **/
 bool Lexer::nextOperator() {
 	if(matchChar('+')) {
-		lookahead = Token(TT_OP, pos, TK_PLUS);
+		lookahead = Token(TT_OP, pos, 1, TK_PLUS);
 		return true;
 	}
 	
@@ -121,13 +124,13 @@ bool Lexer::nextIdent() {
 	std::string kw(beg, pos.cur - beg);
 	
 	if(kw == "nil") {
-		lookahead = Token(TT_NIL, pos, 0);
+		lookahead = Token(TT_NIL, pos, 3, 0);
 	}
 	else if(kw == "true") {
-		lookahead = Token(TT_BOOL, pos, true);
+		lookahead = Token(TT_BOOL, pos, 4, true);
 	}
 	else if(kw == "false") {
-		lookahead = Token(TT_BOOL, pos, false);
+		lookahead = Token(TT_BOOL, pos, 5, false);
 	}
 	else {
 		return false;
@@ -140,6 +143,7 @@ bool Lexer::nextIdent() {
  * Handles all number types, for now just decimal.
 **/
 bool Lexer::nextNumber() {
+	auto start = pos;
 	int v = 0, c = nextChar();
 	
 	if(isdigit(c)) {
@@ -151,7 +155,7 @@ bool Lexer::nextNumber() {
 			c = nextChar();
 		} while(isdigit(c));
 		
-		lookahead = Token(TT_INT, pos, v);
+		lookahead = Token(TT_INT, start, pos.cur - start.cur, v);
 		return true;
 	}
 	else {

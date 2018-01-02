@@ -7,5 +7,6 @@
 #include "common.hpp"
 #include "vm.hpp"
 #include "value.hpp"
+#include "parse.hpp"
 
 #endif

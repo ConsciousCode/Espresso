@@ -4,6 +4,7 @@
 
 namespace esp {
 namespace vm {
+
 /**
  * Structure of all the data used to build a function.
 **/
@@ -111,6 +112,7 @@ struct Parser {
 		return lhs;
 	}
 };
+
 } /* namespace vm */
 
 Function* parse(const std::string& code) {

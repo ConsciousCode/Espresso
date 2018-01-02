@@ -12,6 +12,9 @@ int main() {
 	cout << env.exec("true").toString() << std::endl;
 	cout << env.exec("false").toString() << std::endl;
 	
+	auto fn = esp::parse("1 + 2");
+	cout << fn->disasm() << std::endl;
+	
 	cout << "Numeric literals..." << std::endl;
 	cout << env.exec("4").toString() << std::endl;
 	cout << env.exec("24895323").toString() << std::endl;

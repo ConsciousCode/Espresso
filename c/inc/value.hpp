@@ -83,14 +83,14 @@ struct Value {
 #ifdef DEBUG
 	#define VALUE_IS(vt, name, native) \
 		inline bool is##name() { \
-			return type == (t); \
+			assert( \
+				(type == (vt)) == std::holds_alternative<native>(value) \
+			); \
+			return type == (vt); \
 		}
 #else
 	#define VALUE_IS(vt, name, native) \
 		inline bool is##name() { \
-			assert( \
-				(type == (vt)) == std::holds_alternative<native>(value) \
-			); \
 			return type == (vt); \
 		}
 #endif
@@ -120,11 +120,15 @@ struct Value {
 	std::string toString();
 	
 	/**
-	 * Only bool coercion is supported for convenience - the rest would
-	 *  produce too many confusing conflicts.
+	 * No integer or real type coercion because it produces ambiguity.
 	**/
+	
 	inline operator bool() {
 		return toBool();
+	}
+	
+	inline operator std::string() {
+		return toString();
 	}
 	
 	MethodProxy get(const std::string& k);
@@ -185,6 +189,12 @@ struct Value {
 	template<typename... ARGS>
 	Result operator()(Value self, ARGS... args);
 };
+
+#ifdef DEBUG
+inline std::string toString(Value v) {
+	return v.toString();
+}
+#endif
 
 /**
  * The result of a function call.

@@ -12,7 +12,7 @@ TEST = $(call dir,test/)
 OBJS = $(patsubst $(SRC)%.cpp,$(OBJ)%.o,$(wildcard $(SRC)*.cpp))
 
 CC = g++
-CFLAGS = -I$(INC) -std=c++17 -fmax-errors=1 -ftemplate-depth=32 -g
+CFLAGS = -I$(INC) -std=c++17 -fmax-errors=1 -ftemplate-depth=32 -g -DDEBUG=1
 
 $(OBJ)%.o: $(SRC)%.cpp $(DEP)%.d
 	$(CC) $(CFLAGS) -c $< -o $@

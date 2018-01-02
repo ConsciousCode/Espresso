@@ -117,7 +117,7 @@ namespace {
 	
 	template<typename T>
 	struct generic_toString<T, false, true> {
-		std::string call(const T& v) {
+		static std::string call(const T& v) {
 			if(std::begin(v) == std::end(v)) {
 				return "{}";
 			}
@@ -126,10 +126,10 @@ namespace {
 			stringstream ss;
 			
 			ss << '{';
-			ss << *(it++);
+			ss << toString(*(it++));
 			
 			for(;it != std::end(v); ++it) {
-				ss << ", " << *it;
+				ss << ", " << toString(*it);
 			}
 			ss << '}';
 			
@@ -139,7 +139,7 @@ namespace {
 }
 
 template<typename T>
-std::string toString(const T& v) {
+std::string toString(T v) {
 	return generic_toString<T,
 		decltype(_can_sstream(declval<T>()))::value,
 		decltype(_can_iter(declval<T>()))::value
@@ -151,17 +151,22 @@ std::string toString(const std::pair<L, R>& v) {
 	return toString(v.left) + ':' + toString(v.right);
 }
 
+template<>
+inline std::string toString<bool>(bool v) {
+	return v? "true" : "false";
+}
+
 inline void print() {
 	cout << endl;
 }
 
 template<typename T>
-void print(const T& v) {
+void print(T v) {
 	cout << toString(v) << endl;
 }
 
 template<typename T, typename... ARGS>
-void print(const T& v, ARGS... args) {
+void print(T v, ARGS... args) {
 	cout << toString(v) << ' ';
 	print(args...);
 }

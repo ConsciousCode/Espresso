@@ -41,11 +41,9 @@ struct Parser {
 	Parser(const std::string& code):lexer(code.c_str()) {}
 	
 	bool match(TokenType tt) {
-		if(lexer.nextToken()) {
-			if(lexer.lookahead.type == tt) {
-				lexer.consumeToken();
-				return true;
-			}
+		if(lexer.lookahead.type == tt) {
+			lexer.consumeToken();
+			return true;
 		}
 		
 		return false;
@@ -89,8 +87,9 @@ struct Parser {
 	}
 
 	bool parseBinaryOp(BinaryOp* binop) {
-		if(lexer.nextToken() && lexer.lookahead.type == TT_OP) {
+		if(lexer.lookahead.type == TT_OP) {
 			*binop = binaryOpProps(lexer.lookahead.value.sym);
+			return true;
 		}
 		
 		return false;
@@ -100,8 +99,9 @@ struct Parser {
 		BinaryOp binop;
 		
 		int lhs = parseAtom();
+		lexer.consumeToken();
 		while(
-			parseBinaryOp(&binop) && binop.precedence <= minprec
+			parseBinaryOp(&binop) && binop.precedence >= minprec
 		) {
 			lexer.consumeToken();
 			parseExpression(binop.precedence + binop.leftassoc);

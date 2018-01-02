@@ -22,6 +22,10 @@ Token::Token(TokenType tt, Position ori, size_t len, Symbol v):type(tt), origin(
 	value.sym = v;
 }
 
+Token::operator bool() {
+	return !(type == TT_NONE || type == TT_ERROR || type == TT_END);
+}
+
 Lexer::Lexer(const char* code) {
 	pos.code = code;
 	pos.cur = code;
@@ -36,20 +40,10 @@ void Lexer::advance() {
 	++pos.pos;
 }
 
-bool Lexer::nextToken() {
-	auto tt = lookahead.type;
-	
-	if(tt == TT_NONE || tt == TT_ERROR) {
-		return false;
-	}
-	else {
-		auto tok = consumeToken();
-		cout << "NEXT " << lookahead.type << " " <<  std::string(lookahead.origin.cur) << std::endl;
-		return tok;
-	}
-}
-
 bool Lexer::consumeToken() {
+	if(*pos.cur == '\0') {
+		
+	}
 	ignoreSpace();
 	
 	return

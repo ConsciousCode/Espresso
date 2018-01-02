@@ -9,14 +9,15 @@
 namespace esp {
 
 enum TokenType {
-	TT_NONE, TT_ERROR,
+	TT_NONE, TT_ERROR, TT_END,
 	TT_NIL, TT_BOOL, TT_INT, TT_OP
 };
 
 #ifdef DEBUG
 namespace debug {
 
-inline std::string toString(TokenType v) {
+template<>
+inline std::string toString<TokenType>(TokenType v) {
 	switch(v) {
 		case TT_NONE: return "TT_NONE";
 		case TT_ERROR: return "TT_ERROR";
@@ -41,7 +42,8 @@ enum Symbol {
 #ifdef DEBUG
 namespace debug {
 
-inline std::string toString(Symbol v) {
+template<>
+inline std::string toString<Symbol>(Symbol v) {
 	switch(v) {
 		case TK_NONE: return "TK_NONE";
 		case TK_PLUS: return "TK_PLUS";
@@ -76,12 +78,15 @@ struct Token {
 	Token(TokenType tt, Position ori, size_t len, int i);
 	Token(TokenType tt, Position ori, size_t len, esp_int i);
 	Token(TokenType tt, Position ori, size_t len, Symbol sym);
+	
+	operator bool();
 };
 
 #ifdef DEBUG
 namespace debug {
 
-inline std::string toString(Token v) {
+template<>
+inline std::string toString<Token>(Token v) {
 	std::string out = toString(v.type);
 	switch(v.type) {
 		case TT_NONE:
@@ -112,7 +117,6 @@ struct Lexer {
 	Lexer(const char* code);
 	
 	void advance();
-	bool nextToken();
 	bool consumeToken();
 	
 	bool matchChar(int c);

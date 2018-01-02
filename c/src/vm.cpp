@@ -56,8 +56,8 @@ struct StackFrame {
 	Value load(int index) {
 		if(index < 0) {
 			// Stack variables erase themselves on access
-			auto v = stack[stack.size() + index - 1];
-			stack.erase(stack.end() + index - 1);
+			auto v = stack[stack.size() + index];
+			stack.erase(stack.end() + index);
 			return v;
 		}
 		else {
@@ -141,9 +141,7 @@ Result Environment::call(Function* fn, std::vector<Value> args) {
 
 Result Environment::exec(Function* fn) {
 	vm::StackFrame frame(fn);
-	auto res = frame.exec(this);
-	
-	return res;
+	return frame.exec(this);
 }
 
 Result Environment::exec(const std::string& code) {

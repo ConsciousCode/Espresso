@@ -6,6 +6,8 @@
 
 #include <string>
 
+#include "common.hpp"
+
 namespace esp {
 namespace vm {
 
@@ -30,6 +32,8 @@ enum Opcode {
 	OP_SHL, OP_SHR
 };
 
+const char* op_name(Opcode op);
+
 /**
  * A VM operation consists of one opcode and an optional payload.
  *
@@ -47,6 +51,23 @@ struct Operation {
 };
 
 }
+
+#ifdef DEBUG
+namespace debug {
+
+template<>
+inline std::string toString<vm::Opcode>(vm::Opcode op) {
+	return op_name(op);
+}
+
+template<>
+inline std::string toString<vm::Operation>(vm::Operation op) {
+	return op.disasm();
+}
+
+} /* namespace debug */
+#endif
+
 }
 
 #endif

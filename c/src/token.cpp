@@ -91,12 +91,36 @@ void Lexer::ignoreSpace() {
  * Parse all symbol-based operators
 **/
 bool Lexer::nextOperator() {
-	if(matchChar('+')) {
-		lookahead = Token(TT_OP, pos, 1, TK_PLUS);
-		return true;
+	auto c = nextChar();
+	
+	switch(c) {
+		case '+':
+			lookahead = Token(TT_OP, pos, 1, TK_PLUS);
+			break;
+		
+		case '-':
+			lookahead = Token(TT_OP, pos, 1, TK_MINUS);
+			break;
+		
+		case '*':
+			lookahead = Token(TT_OP, pos, 1, TK_ASTERISK);
+			break;
+		
+		case '/':
+			lookahead = Token(TT_OP, pos, 1, TK_FSLASH);
+			break;
+		
+		case '%':
+			lookahead = Token(TT_OP, pos, 1, TK_PERCENT);
+			break;
+		
+		default:
+			return false;
 	}
 	
-	return false;
+	advance();
+	
+	return true;
 }
 
 /**

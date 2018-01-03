@@ -34,7 +34,7 @@ inline std::string toString<TokenType>(TokenType v) {
 
 enum Symbol {
 	TK_NONE,
-	TK_PLUS, TK_MINUS,
+	TK_PLUS, TK_MINUS, TK_ASTERISK, TK_FSLASH, TK_PERCENT,
 	
 	TK_RETURN
 };

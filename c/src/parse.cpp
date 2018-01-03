@@ -64,6 +64,7 @@ struct Parser {
 				return -1;
 			
 			default:
+				debug::print("Unexpected token", lexer.lookahead);
 				throw std::runtime_error("Not an atom");
 		}
 	}
@@ -80,6 +81,10 @@ struct Parser {
 	BinaryOp binaryOpProps(Symbol op) {
 		switch(op) {
 			case TK_PLUS: return {OP_ADD, 1, LEFT};
+			case TK_MINUS: return {OP_SUB, 1, LEFT};
+			case TK_ASTERISK: return {OP_MUL, 2, LEFT};
+			case TK_FSLASH: return {OP_DIV, 2, LEFT};
+			case TK_PERCENT: return {OP_MOD, 2, LEFT};
 			
 			default:
 				return {OP_NOP, 0, LEFT};
